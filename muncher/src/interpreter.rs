@@ -1,9 +1,9 @@
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
-use crate::{Value, Block, Intrinsic, SourceBlock, Result, Error, Intrinsics};
+use crate::{Value, Block, Intrinsic, SourceBlock, Result, Error, Intrinsics, Object};
 use crate::lexer::{Token, TokenKind};
-use crate::muncher::MunchOutput;
+use crate::muncher::{MunchOutput, Muncher};
 
 fn double_def(token: Token) -> Error {
     todo!("double def error")
@@ -165,7 +165,18 @@ impl Interpreter {
             let value = Value::String(crate::lexer::unescape_string(&str.source).into());
             self.munch_calls(value, tail)
         } else if let Some((_obj, tail)) = eat_token(tokens, |t| t.kind == TokenKind::Object) {
-            todo!("parse object literal")
+            let (name, tail) = eat_token(tail, |t| t.kind == TokenKind::Ident)
+                .ok_or_else(|| todo!("expected identifier"))?;
+            let (_left_curly, tail) = eat_token(tail, Token::is_left_brace)
+                .ok_or_else(|| todo!("expected left curly"))?;
+            let (matchers, tail) = self.munch_object_contents(tail)?;
+            let muncher = compile_object_muncher(matchers)?;
+            let object = Value::Object(Rc::new(Object {
+                name: name.source,
+                properties: Default::default(),
+                muncher,
+            }));
+            Ok((object, tail))
         } else {
             println!("{:?}", tokens);
             todo!("what else?")
@@ -201,6 +212,68 @@ impl Interpreter {
         let return_value = block_interp.block(block)?;
         self.munch_calls(return_value, tokens)
     }
+
+    fn munch_object_contents<'src>(&mut self, mut tokens: &'src [Token]) -> Result<(Vec<Matcher>, &'src [Token])> {
+        let mut matchers = Vec::new();
+        while !tokens[0].is_right_brace() {
+            let mut pattern = Vec::new();
+            while !tokens[0].is_left_brace() && !tokens[0].is_right_brace() {
+                if tokens[0].is_dollar() {
+                    let (bind, tail) = eat_token(tokens, |t| t.kind == TokenKind::Ident)
+                        .ok_or_else(|| todo!("expected identifier"))?;
+                    let (_colon, tail) = eat_token(tail, Token::is_colon)
+                        .ok_or_else(|| todo!("expected colon"))?;
+                    let (kind, tail) = eat_token(tail, |t| t.kind == TokenKind::Ident)
+                        .ok_or_else(|| todo!("expected identifier"))?;
+                    pattern.push(Pattern::Var { kind, bind });
+                    tokens = tail;
+                } else {
+                    pattern.push(Pattern::Token(tokens[0].clone()));
+                    tokens = &tokens[1..];
+                }
+            }
+            if tokens[0].is_right_brace() {
+                todo!("method is missing its body error");
+            }
+            let (body, rest) = self.munch_source_block(tokens);
+            tokens = rest;
+            matchers.push(Matcher { pattern, body });
+        }
+        Ok((matchers, &tokens[1..]))
+    }
+
+    fn munch_source_block<'src>(&mut self, mut tokens: &'src [Token]) -> (SourceBlock, &'src [Token]) {
+        let mut contents = Vec::new();
+        let mut depth = 0;
+        while depth != 0 || !tokens[0].is_right_brace() {
+            contents.push(tokens[0].clone());
+            if tokens[0].is_left_brace() {
+                depth += 1;
+            } else if tokens[0].is_right_brace() {
+                depth -= 1;
+            }
+            tokens = &tokens[1..];
+        }
+        let block = SourceBlock { tokens: contents };
+        (block, &tokens[1..])
+    }
+}
+
+fn compile_object_muncher(matchers: Vec<Matcher>) -> Result<Rc<dyn Muncher>> {
+    if matchers.len() == 0 {
+        return Ok(Rc::new(crate::muncher::NoMuncher));
+    }
+    todo!("compile muncher")
+}
+
+enum Pattern {
+    Var { kind: Token, bind: Token },
+    Token(Token),
+}
+
+struct Matcher {
+    pattern: Vec<Pattern>,
+    body: SourceBlock,
 }
 
 fn can_start_call(token: &Token) -> bool {

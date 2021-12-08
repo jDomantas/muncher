@@ -54,6 +54,23 @@ impl Token {
         // ( rainbow brackets!
         &*self.source == ")"
     }
+
+    pub(crate) fn is_left_brace(&self) -> bool {
+        &*self.source == "{" // } rainbow brackets!
+    }
+
+    pub(crate) fn is_right_brace(&self) -> bool {
+        // { rainbow brackets!
+        &*self.source == "}"
+    }
+
+    pub(crate) fn is_dollar(&self) -> bool {
+        &*self.source == "$"
+    }
+
+    pub(crate) fn is_colon(&self) -> bool {
+        &*self.source == ":"
+    }
 }
 
 fn lex(source: &str) -> Result<Vec<Token>> {
