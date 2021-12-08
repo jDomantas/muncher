@@ -40,9 +40,18 @@ enum Block {
     Intrinsic(Intrinsic),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 struct SourceBlock {
+    closure: Env,
     tokens: Vec<Token>,
+}
+
+impl fmt::Debug for SourceBlock {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("SourceBlock")
+            .field("tokens", &self.tokens)
+            .finish()
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -88,7 +97,7 @@ pub trait Intrinsics {
 }
 
 pub fn eval(source: &str, intrinsics: Rc<dyn Intrinsics>) -> Result<()> {
-    let block = lexer::lex_block(source)?;
+    let tokens = lexer::lex_program(source)?;
     let env = Env::new();
     env.define_raw("print", Value::Object(Rc::new(Object {
         name: "Print".into(),
@@ -96,10 +105,13 @@ pub fn eval(source: &str, intrinsics: Rc<dyn Intrinsics>) -> Result<()> {
         muncher: Rc::new(muncher::PrintMuncher),
     })));
     let mut interp = Interpreter {
-        env,
+        env: env.clone(),
         intrinsics,
     };
-    interp.block(Rc::new(Block::Source(block)))?;
+    interp.block(Rc::new(Block::Source(SourceBlock {
+        closure: env.clone(),
+        tokens,
+    })))?;
     Ok(())
 }
 
@@ -113,4 +125,9 @@ fn basic_test() {
         r#" print("Hello, world!"); "#,
         Rc::new(Intr),
     ).unwrap();
+}
+
+pub(crate) fn debug_tokens(tokens: &[Token]) {
+    let tokens = tokens.iter().map(|t| &*t.source).collect::<Vec<_>>();
+    println!("tokens: {:?}", tokens);
 }

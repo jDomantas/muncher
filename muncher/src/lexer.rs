@@ -1,6 +1,6 @@
 use logos::Logos;
 use std::rc::Rc;
-use crate::{Pos, Result, Span, Error, SourceBlock};
+use crate::{Pos, Result, Span, Error, SourceBlock, interpreter::Env};
 
 #[derive(Logos, Debug, PartialEq, Eq, Clone, Copy)]
 pub(crate) enum TokenKind {
@@ -106,12 +106,10 @@ fn lex(source: &str) -> Result<Vec<Token>> {
     Ok(tokens)
 }
 
-pub(crate) fn lex_block(source: &str) -> Result<SourceBlock> {
+pub(crate) fn lex_program(source: &str) -> Result<Vec<Token>> {
     let tokens = lex(source)?;
     // TODO: verify that parentheses are balanced
-    Ok(SourceBlock {
-        tokens,
-    })
+    Ok(tokens)
 }
 
 pub(crate) fn unescape_string(str: &str) -> String {

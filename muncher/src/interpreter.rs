@@ -10,9 +10,10 @@ fn double_def(token: Token) -> Error {
 }
 
 fn undefined_var(token: Token) -> Error {
-    todo!("undefined var error")
+    todo!("undefined var error: {:?}", token)
 }
 
+#[derive(Debug)]
 struct EnvInner {
     values: RefCell<HashMap<Rc<str>, Value>>,
     next: Option<Rc<EnvInner>>,
@@ -49,6 +50,7 @@ impl EnvInner {
     }
 }
 
+#[derive(Debug, Clone)]
 pub(crate) struct Env {
     inner: Rc<EnvInner>,
 }
@@ -170,7 +172,7 @@ impl Interpreter {
             let (_left_curly, tail) = eat_token(tail, Token::is_left_brace)
                 .ok_or_else(|| todo!("expected left curly"))?;
             let (matchers, tail) = self.munch_object_contents(tail)?;
-            let muncher = compile_object_muncher(matchers)?;
+            let muncher = compile_object_muncher(matchers, 0)?;
             let object = Value::Object(Rc::new(Object {
                 name: name.source,
                 properties: Default::default(),
@@ -178,7 +180,6 @@ impl Interpreter {
             }));
             Ok((object, tail))
         } else {
-            println!("{:?}", tokens);
             todo!("what else?")
         }
     }
@@ -205,6 +206,15 @@ impl Interpreter {
                 MunchOutput::FailedEval { error } => return Err(error),
             }
         };
+        let env = Env {
+            inner: Rc::new(EnvInner {
+                values: env.inner.values.clone(),
+                next: match &*block {
+                    Block::Source(s) => Some(s.closure.inner.clone()),
+                    Block::Intrinsic(_) => None,
+                },
+            }),
+        };
         let mut block_interp = Interpreter {
             env,
             intrinsics: self.intrinsics.clone(),
@@ -217,6 +227,9 @@ impl Interpreter {
         let mut matchers = Vec::new();
         while !tokens[0].is_right_brace() {
             let mut pattern = Vec::new();
+            if !can_start_call(&tokens[0]) {
+                todo!("can't start call with token {:?}", tokens[0].source);
+            }
             while !tokens[0].is_left_brace() && !tokens[0].is_right_brace() {
                 if tokens[0].is_dollar() {
                     let (bind, tail) = eat_token(tokens, |t| t.kind == TokenKind::Ident)
@@ -235,8 +248,9 @@ impl Interpreter {
             if tokens[0].is_right_brace() {
                 todo!("method is missing its body error");
             }
-            let (body, rest) = self.munch_source_block(tokens);
+            let (body, rest) = self.munch_source_block(&tokens[1..]);
             tokens = rest;
+            let body = Rc::new(Block::Source(body));
             matchers.push(Matcher { pattern, body });
         }
         Ok((matchers, &tokens[1..]))
@@ -254,18 +268,77 @@ impl Interpreter {
             }
             tokens = &tokens[1..];
         }
-        let block = SourceBlock { tokens: contents };
+        let block = SourceBlock {
+            closure: self.env.clone(),
+            tokens: contents,
+        };
         (block, &tokens[1..])
     }
 }
 
-fn compile_object_muncher(matchers: Vec<Matcher>) -> Result<Rc<dyn Muncher>> {
+fn compile_object_muncher(matchers: Vec<Matcher>, idx: usize) -> Result<Rc<dyn Muncher>> {
     if matchers.len() == 0 {
         return Ok(Rc::new(crate::muncher::NoMuncher));
     }
-    todo!("compile muncher")
+    let mut simple = Vec::new();
+    let mut meta = Vec::new();
+    let mut done = Vec::new();
+    for matcher in matchers {
+        match matcher.pattern.get(idx).cloned() {
+            Some(Pattern::Var { kind, bind }) => {
+                meta.push((kind, bind, matcher));
+            }
+            Some(Pattern::Token(tok)) => {
+                simple.push((tok, matcher));
+            }
+            None => {
+                done.push(matcher);
+            }
+        }
+    }
+    if done.len() > 1 {
+        todo!("multiple matchers are identical");
+    }
+    if done.len() > 0 && (simple.len() > 0 || meta.len() > 0) {
+        todo!("matcher is prefix of other matcher");
+    }
+    if done.len() > 0 {
+        return Ok(Rc::new(crate::muncher::CompleteMuncher {
+            block: done[0].body.clone(),
+        }));
+    }
+    if simple.len() > 0 && meta.len() > 0 {
+        todo!("overlapping matchers");
+    }
+    if simple.len() > 0 {
+        simple.sort_by(|a, b| a.0.source.cmp(&b.0.source));
+        let mut group = Vec::<(Token, Matcher)>::new();
+        let mut cases = HashMap::new();
+        while let Some((tok, matcher)) = simple.pop() {
+            if group.len() > 0 && tok.source != group[0].0.source {
+                let source = group[0].0.source.clone();
+                let group = compile_object_muncher(
+                    group.drain(..).map(|(_, m)| m).collect(),
+                    idx + 1,
+                )?;
+                cases.insert(source, group);
+            }
+            group.push((tok, matcher));
+        }
+        if group.len() > 0 {
+            let source = group[0].0.source.clone();
+            let group = compile_object_muncher(
+                group.drain(..).map(|(_, m)| m).collect(),
+                idx + 1,
+            )?;
+            cases.insert(source, group);
+        }
+        return Ok(Rc::new(crate::muncher::PlainMuncher { cases }));
+    }
+    todo!("compile meta matchers");
 }
 
+#[derive(Clone)]
 enum Pattern {
     Var { kind: Token, bind: Token },
     Token(Token),
@@ -273,7 +346,7 @@ enum Pattern {
 
 struct Matcher {
     pattern: Vec<Pattern>,
-    body: SourceBlock,
+    body: Rc<Block>,
 }
 
 fn can_start_call(token: &Token) -> bool {

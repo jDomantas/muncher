@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::rc::Rc;
 use crate::{Block, Error, Intrinsic, Value};
 use crate::interpreter::{Env, Interpreter};
@@ -25,6 +26,40 @@ pub(crate) struct NoMuncher;
 impl Muncher for NoMuncher {
     fn munch<'src>(&self, mut tokens: &'src [Token], env: &Env, caller: &mut Interpreter) -> MunchOutput<'src> {
         MunchOutput::Failed
+    }
+}
+
+pub(crate) struct CompleteMuncher {
+    pub(crate) block: Rc<Block>,
+}
+
+impl Muncher for CompleteMuncher {
+    fn munch<'src>(&self, mut tokens: &'src [Token], env: &Env, caller: &mut Interpreter) -> MunchOutput<'src> {
+        MunchOutput::Done { block: self.block.clone(), tokens }
+    }
+}
+
+pub(crate) struct PlainMuncher {
+    pub(crate) cases: HashMap<Rc<str>, Rc<dyn Muncher>>,
+}
+
+impl Muncher for PlainMuncher {
+    fn munch<'src>(&self, mut tokens: &'src [Token], env: &Env, caller: &mut Interpreter) -> MunchOutput<'src> {
+        match tokens {
+            [tok, rest @ ..] => {
+                if let Some(next) = self.cases.get(&tok.source).cloned() {
+                    MunchOutput::Continue {
+                        muncher: next,
+                        tokens: rest,
+                    }
+                } else {
+                    MunchOutput::Failed
+                }
+            }
+            [] => {
+                MunchOutput::Failed
+            }
+        }
     }
 }
 
