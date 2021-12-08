@@ -232,12 +232,12 @@ impl Interpreter {
             }
             while !tokens[0].is_left_brace() && !tokens[0].is_right_brace() {
                 if tokens[0].is_dollar() {
-                    let (bind, tail) = eat_token(tokens, |t| t.kind == TokenKind::Ident)
-                        .ok_or_else(|| todo!("expected identifier"))?;
+                    let (bind, tail) = eat_token(&tokens[1..], |t| t.kind == TokenKind::Ident)
+                        .ok_or_else(|| todo!("expected identifier (var)"))?;
                     let (_colon, tail) = eat_token(tail, Token::is_colon)
                         .ok_or_else(|| todo!("expected colon"))?;
                     let (kind, tail) = eat_token(tail, |t| t.kind == TokenKind::Ident)
-                        .ok_or_else(|| todo!("expected identifier"))?;
+                        .ok_or_else(|| todo!("expected identifier (muncher)"))?;
                     pattern.push(Pattern::Var { kind, bind });
                     tokens = tail;
                 } else {
@@ -335,7 +335,12 @@ fn compile_object_muncher(matchers: Vec<Matcher>, idx: usize) -> Result<Rc<dyn M
         }
         return Ok(Rc::new(crate::muncher::PlainMuncher { cases }));
     }
-    todo!("compile meta matchers");
+    if meta.iter().any(|(kind, _, _)| kind.source != meta[0].0.source) {
+        todo!("meta matchers branch out");
+    }
+    let bind = meta[0].1.clone();
+    let cont = compile_object_muncher(meta.into_iter().map(|t| t.2).collect(), idx + 1)?;
+    Ok(Rc::new(crate::muncher::ExprMuncher { bind, cont }))
 }
 
 #[derive(Clone)]

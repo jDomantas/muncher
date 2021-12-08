@@ -63,6 +63,25 @@ impl Muncher for PlainMuncher {
     }
 }
 
+pub(crate) struct ExprMuncher {
+    pub(crate) bind: Token,
+    pub(crate) cont: Rc<dyn Muncher>,
+}
+
+impl Muncher for ExprMuncher {
+    fn munch<'src>(&self, mut tokens: &'src [Token], env: &Env, caller: &mut Interpreter) -> MunchOutput<'src> {
+        let (value, rest) = match caller.expr(tokens) {
+            Ok(x) => x,
+            Err(error) => return MunchOutput::FailedEval { error },
+        };
+        env.define(self.bind.clone(), value).unwrap();
+        MunchOutput::Continue {
+            muncher: self.cont.clone(),
+            tokens: rest,
+        }
+    }
+}
+
 pub(crate) struct PrintMuncher;
 
 impl Muncher for PrintMuncher {
