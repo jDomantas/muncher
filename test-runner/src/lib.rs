@@ -32,6 +32,7 @@ fn check_program_run(
     stdout_path: Option<&Path>,
     stderr_path: Option<&Path>,
 ) {
+    println!("running {}", path.display());
     let source = std::fs::read_to_string(path)
         .expect(&format!("failed to read {:?}", path));
     let stdout = match stdout_path {

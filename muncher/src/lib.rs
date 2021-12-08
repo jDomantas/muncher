@@ -114,6 +114,15 @@ pub struct Span {
     pub end: Pos,
 }
 
+impl Span {
+    pub(crate) fn union(self, other: Span) -> Span {
+        Span {
+            start: self.start,
+            end: other.end,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy)]
 pub struct Pos {
     pub line: u32,
@@ -153,9 +162,4 @@ fn basic_test() {
         r#" print("Hello, world!"); "#,
         Rc::new(Intr),
     ).unwrap();
-}
-
-pub(crate) fn debug_tokens(tokens: &[Token]) {
-    let tokens = tokens.iter().map(|t| &*t.source).collect::<Vec<_>>();
-    println!("tokens: {:?}", tokens);
 }
