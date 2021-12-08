@@ -28,13 +28,11 @@ impl EnvInner {
         }
     }
 
-    fn get(&self, ident: Token) -> Result<Value> {
-        if let Some(value) = self.values.borrow().get(&ident.source).cloned() {
-            Ok(value)
-        } else if let Some(env) = &self.next {
-            env.get(ident)
+    fn get_raw(&self, var: &str) -> Option<Value> {
+        if let Some(value) = self.values.borrow().get(var).cloned() {
+            Some(value)
         } else {
-            Err(undefined_var(ident))
+            self.next.as_ref().and_then(|e| e.get_raw(var))
         }
     }
 
@@ -70,7 +68,13 @@ impl Env {
     }
 
     pub(crate) fn get(&self, ident: Token) -> Result<Value> {
-        self.inner.get(ident)
+        if let Some(value) = self.inner.get_raw(&ident.source) {
+            Ok(value)
+        } else if let Ok(num) = ident.source.parse::<i64>() {
+            Ok(Value::Int(num))
+        } else {
+            Err(undefined_var(ident))
+        }
     }
 
     pub(crate) fn set(&self, ident: Token, value: Value) -> Result<()> {
@@ -88,16 +92,6 @@ impl Env {
 
     pub(crate) fn define_raw(&self, name: &'static str, value: Value) {
         self.inner.values.borrow_mut().insert(name.into(), value);
-    }
-
-    pub(crate) fn get_raw(&self, name: &str) -> Value {
-        let mut env = &*self.inner;
-        loop {
-            if let Some(value) = env.values.borrow().get(name).cloned() {
-                return value;
-            }
-            env = env.next.as_ref().expect("get_raw failed");
-        }
     }
 }
 
