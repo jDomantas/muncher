@@ -6,11 +6,11 @@ use crate::lexer::{Token, TokenKind};
 use crate::muncher::{MunchOutput, Muncher};
 
 fn double_def(token: Token) -> Error {
-    todo!("double def error")
+    todo!("error: double def error")
 }
 
 fn undefined_var(token: Token) -> Error {
-    todo!("undefined var error: {:?}", token)
+    todo!("error: undefined var error: {:?}", token)
 }
 
 #[derive(Debug)]
@@ -126,9 +126,9 @@ impl Interpreter {
             Ok(tokens)
         } else if let Some((_, tail)) = eat_token(tokens, |t| t.kind == TokenKind::Let) {
             let (ident, tail) = eat_token(tail, Token::is_ident)
-                .ok_or_else(|| todo!("expected identifier"))?;
+                .ok_or_else(|| todo!("error: expected identifier"))?;
             let (_eq, tail) = eat_token(tail, Token::is_eq)
-                .ok_or_else(|| todo!("expected `=`"))?;
+                .ok_or_else(|| todo!("error: expected `=`"))?;
             let (value, tail) = self.expr(tail)?;
             self.env.define(ident, value)?;
             Ok(tail)
@@ -168,9 +168,9 @@ impl Interpreter {
             self.munch_calls(value, tail)
         } else if let Some((_obj, tail)) = eat_token(tokens, |t| t.kind == TokenKind::Object) {
             let (name, tail) = eat_token(tail, |t| t.kind == TokenKind::Ident)
-                .ok_or_else(|| todo!("expected identifier"))?;
+                .ok_or_else(|| todo!("error: expected identifier"))?;
             let (_left_curly, tail) = eat_token(tail, Token::is_left_brace)
-                .ok_or_else(|| todo!("expected left curly"))?;
+                .ok_or_else(|| todo!("error: expected left curly"))?;
             let (matchers, tail) = self.munch_object_contents(tail)?;
             let muncher = compile_object_muncher(matchers, 0)?;
             let object = Value::Object(Rc::new(Object {
@@ -180,7 +180,7 @@ impl Interpreter {
             }));
             Ok((object, tail))
         } else {
-            todo!("what else?")
+            todo!("error: expected expression")
         }
     }
 
@@ -201,7 +201,7 @@ impl Interpreter {
                     tokens = next_tokens;
                 }
                 MunchOutput::Failed => {
-                    todo!("emit failed call error");
+                    todo!("error: failed call");
                 }
                 MunchOutput::FailedEval { error } => return Err(error),
             }
@@ -228,16 +228,16 @@ impl Interpreter {
         while !tokens[0].is_right_brace() {
             let mut pattern = Vec::new();
             if !can_start_call(&tokens[0]) {
-                todo!("can't start call with token {:?}", tokens[0].source);
+                todo!("error: can't start call with token {:?}", tokens[0].source);
             }
             while !tokens[0].is_left_brace() && !tokens[0].is_right_brace() {
                 if tokens[0].is_dollar() {
                     let (bind, tail) = eat_token(&tokens[1..], |t| t.kind == TokenKind::Ident)
-                        .ok_or_else(|| todo!("expected identifier (var)"))?;
+                        .ok_or_else(|| todo!("error: expected identifier (var)"))?;
                     let (_colon, tail) = eat_token(tail, Token::is_colon)
-                        .ok_or_else(|| todo!("expected colon"))?;
+                        .ok_or_else(|| todo!("error: expected colon"))?;
                     let (kind, tail) = eat_token(tail, |t| t.kind == TokenKind::Ident)
-                        .ok_or_else(|| todo!("expected identifier (muncher)"))?;
+                        .ok_or_else(|| todo!("error: expected identifier (muncher)"))?;
                     pattern.push(Pattern::Var { kind, bind });
                     tokens = tail;
                 } else {
@@ -246,7 +246,7 @@ impl Interpreter {
                 }
             }
             if tokens[0].is_right_brace() {
-                todo!("method is missing its body error");
+                todo!("error: method is missing its body");
             }
             let (body, rest) = self.munch_source_block(&tokens[1..]);
             tokens = rest;
@@ -297,10 +297,10 @@ fn compile_object_muncher(matchers: Vec<Matcher>, idx: usize) -> Result<Rc<dyn M
         }
     }
     if done.len() > 1 {
-        todo!("multiple matchers are identical");
+        todo!("error: multiple matchers are identical");
     }
     if done.len() > 0 && (simple.len() > 0 || meta.len() > 0) {
-        todo!("matcher is prefix of other matcher");
+        todo!("error: matcher is prefix of other matcher");
     }
     if done.len() > 0 {
         return Ok(Rc::new(crate::muncher::CompleteMuncher {
@@ -308,7 +308,7 @@ fn compile_object_muncher(matchers: Vec<Matcher>, idx: usize) -> Result<Rc<dyn M
         }));
     }
     if simple.len() > 0 && meta.len() > 0 {
-        todo!("overlapping matchers");
+        todo!("error: overlapping matchers");
     }
     if simple.len() > 0 {
         simple.sort_by(|a, b| a.0.source.cmp(&b.0.source));
@@ -336,7 +336,7 @@ fn compile_object_muncher(matchers: Vec<Matcher>, idx: usize) -> Result<Rc<dyn M
         return Ok(Rc::new(crate::muncher::PlainMuncher { cases }));
     }
     if meta.iter().any(|(kind, _, _)| kind.source != meta[0].0.source) {
-        todo!("meta matchers branch out");
+        todo!("error: meta matchers branch out");
     }
     let bind = meta[0].1.clone();
     let cont = compile_object_muncher(meta.into_iter().map(|t| t.2).collect(), idx + 1)?;
