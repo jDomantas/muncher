@@ -28,7 +28,7 @@ fn double_def(token: Token) -> Error {
 }
 
 fn undefined_var(token: Token) -> Error {
-    todo_error("undefined var")
+    todo!("error: undefined var {}", token.source)
 }
 
 #[derive(Debug)]
@@ -131,6 +131,9 @@ impl Interpreter {
             Block::Intrinsic(Intrinsic::Print(str)) => {
                 self.intrinsics.print(&str);
                 Ok(Value::Nil)
+            }
+            Block::Intrinsic(Intrinsic::Value(value)) => {
+                Ok(value.clone())
             }
         }
     }

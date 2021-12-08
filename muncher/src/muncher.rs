@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 use std::rc::Rc;
-use crate::{Block, Error, Intrinsic, Value};
+use crate::{Block, Error, Intrinsic, Value, Span};
 use crate::interpreter::{Env, Interpreter};
-use crate::lexer::Token;
+use crate::lexer::{Token, TokenKind};
 
 pub(crate) enum MunchOutput<'src> {
     Done {
@@ -98,18 +98,86 @@ impl Muncher for PrintMuncher {
             return e;
         }
 
-        let printed = match value {
-            Value::Nil => "nil".to_owned(),
-            Value::Int(x) => x.to_string(),
-            Value::Bool(b) => b.to_string(),
-            Value::String(s) => s.to_string(),
-            Value::Ident(i) => format!("<Ident {:?}>", i),
-            Value::Block(b) => "<Block>".to_owned(),
-            Value::Object(o) => format!("<Object {}>", o.name),
+        MunchOutput::Done {
+            block: Rc::new(Block::Intrinsic(Intrinsic::Print(value.to_string()))),
+            tokens,
+        }
+    }
+}
+
+pub(crate) struct NumMuncher {
+    pub(crate) value: i64,
+}
+
+impl Muncher for NumMuncher {
+    fn munch<'src>(&self, mut tokens: &'src [Token], env: &Env, caller: &mut Interpreter) -> MunchOutput<'src> {
+        if let Err(e) = eat_token(&mut tokens, Token::is_dot) {
+            return e;
+        }
+
+        fn cast_int(value: Value, span: Span) -> Result<i64, Error> {
+            if let Value::Int(i) = value {
+                Ok(i)
+            } else {
+                Err(Error {
+                    msg: format!("expected int, got {}", value),
+                    span,
+                })
+            }
+        }
+
+        let handler: fn(_, _, i64) -> _ = match tokens
+            .get(0)
+            .filter(|t| t.kind == TokenKind::Ident)
+            .map(|t| &*t.source)
+        {
+            Some("add") => |v, s, n| cast_int(v, s).map(|i| n.wrapping_add(i).into()),
+            Some("sub") => |v, s, n| cast_int(v, s).map(|i| n.wrapping_sub(i).into()),
+            Some("mul") => |v, s, n| cast_int(v, s).map(|i| n.wrapping_mul(i).into()),
+            Some("div") => |v, s, n| cast_int(v, s).and_then(|i| if i == 0 {
+                Err(Error {
+                    msg: "divisor is zero".to_owned(),
+                    span: s,
+                })
+            } else {
+                Ok(n.wrapping_div(i).into())
+            }),
+            Some("mod") => |v, s, n| cast_int(v, s).and_then(|i| if i == 0 {
+                Err(Error {
+                    msg: "divisor is zero".to_owned(),
+                    span: s,
+                })
+            } else {
+                Ok(n.wrapping_rem(i).into())
+            }),
+            Some("lt") => |v, s, n| cast_int(v, s).map(|i| (n < i).into()),
+            Some("le") => |v, s, n| cast_int(v, s).map(|i| (n <= i).into()),
+            Some("eq") => |v, s, n| cast_int(v, s).map(|i| (n == i).into()),
+            Some("ne") => |v, s, n| cast_int(v, s).map(|i| (n != i).into()),
+            Some("gt") => |v, s, n| cast_int(v, s).map(|i| (n > i).into()),
+            Some("ge") => |v, s, n| cast_int(v, s).map(|i| (n >= i).into()),
+            _ => return MunchOutput::Failed,
+        };
+        tokens = &tokens[1..];
+        if let Err(e) = eat_token(&mut tokens, Token::is_left_paren) {
+            return e;
+        }
+        let (value, rest) = match caller.expr(tokens) {
+            Ok(x) => x,
+            Err(error) => return MunchOutput::FailedEval { error },
+        };
+        tokens = rest;
+        if let Err(e) = eat_token(&mut tokens, Token::is_right_paren) {
+            return e;
+        }
+        // fixme: bogus span
+        let result = match handler(value, tokens[0].span, self.value) {
+            Ok(x) => x,
+            Err(e) => return MunchOutput::FailedEval { error: e },
         };
 
         MunchOutput::Done {
-            block: Rc::new(Block::Intrinsic(Intrinsic::Print(printed))),
+            block: Rc::new(Block::Intrinsic(Intrinsic::Value(result))),
             tokens,
         }
     }

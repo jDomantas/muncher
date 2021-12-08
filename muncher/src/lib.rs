@@ -25,11 +25,38 @@ pub(crate) enum Value {
     Object(Rc<Object>),
 }
 
+impl From<bool> for Value {
+    fn from(v: bool) -> Self {
+        Self::Bool(v)
+    }
+}
+
+impl From<i64> for Value {
+    fn from(v: i64) -> Self {
+        Self::Int(v)
+    }
+}
+
 impl Value {
     fn get_muncher(&self) -> Rc<dyn Muncher> {
         match self {
+            Value::Int(i) => Rc::new(muncher::NumMuncher { value: *i }),
             Value::Object(o) => o.muncher.clone(),
             _ => Rc::new(muncher::NoMuncher),
+        }
+    }
+}
+
+impl fmt::Display for Value {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Value::Nil => write!(f, "nil"),
+            Value::Int(i) => write!(f, "{}", i),
+            Value::Bool(b) => write!(f, "{}", b),
+            Value::String(s) => write!(f, "{}", s),
+            Value::Ident(i) => write!(f, "<Ident {:?}>", i),
+            Value::Block(b) => write!(f, "<Block>"),
+            Value::Object(o) => write!(f, "<Object {}>", o.name),
         }
     }
 }
@@ -57,6 +84,7 @@ impl fmt::Debug for SourceBlock {
 #[derive(Debug, Clone)]
 enum Intrinsic {
     Print(String),
+    Value(Value),
 }
 
 struct Object {
