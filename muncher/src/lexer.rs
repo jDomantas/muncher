@@ -14,6 +14,8 @@ pub(crate) enum TokenKind {
     Object,
     #[token("self")]
     This,
+    #[token("return")]
+    Return,
     #[token("let")]
     Let,
     #[regex(r"[ \t\r\n]+")]

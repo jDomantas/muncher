@@ -5,12 +5,30 @@ use crate::{Value, Block, Intrinsic, SourceBlock, Result, Error, Intrinsics, Obj
 use crate::lexer::{Token, TokenKind};
 use crate::muncher::{MunchOutput, Muncher};
 
+enum EvalBreak {
+    Error(Error),
+    Return(Value),
+}
+
+impl From<Error> for EvalBreak {
+    fn from(err: Error) -> Self {
+        EvalBreak::Error(err)
+    }
+}
+
+#[track_caller]
+fn todo_error(message: &str) -> Error {
+    todo!("{}", message)
+}
+
+type EvalResult<T> = std::result::Result<T, EvalBreak>;
+
 fn double_def(token: Token) -> Error {
-    todo!("error: double def error")
+    todo_error("double def")
 }
 
 fn undefined_var(token: Token) -> Error {
-    todo!("error: undefined var error: {:?}", token)
+    todo_error("undefined var")
 }
 
 #[derive(Debug)]
@@ -105,7 +123,11 @@ pub(crate) struct Interpreter {
 impl Interpreter {
     pub(crate) fn block(&mut self, block: Rc<Block>) -> Result<Value> {
         match &*block {
-            Block::Source(s) => self.source_block(s),
+            Block::Source(s) => match self.source_block(s) {
+                Ok(()) => Ok(Value::Nil),
+                Err(EvalBreak::Error(err)) => Err(err),
+                Err(EvalBreak::Return(ret)) => Ok(ret),
+            },
             Block::Intrinsic(Intrinsic::Print(str)) => {
                 self.intrinsics.print(&str);
                 Ok(Value::Nil)
@@ -113,25 +135,28 @@ impl Interpreter {
         }
     }
 
-    fn source_block(&mut self, block: &SourceBlock) -> Result<Value> {
+    fn source_block(&mut self, block: &SourceBlock) -> EvalResult<()> {
         let mut tokens = block.tokens.as_slice();
         while tokens.len() > 0 {
             tokens = self.stmt(tokens)?;
         }
-        Ok(Value::Nil)
+        Ok(())
     }
 
-    pub(crate) fn stmt<'src>(&mut self, tokens: &'src [Token]) -> Result<&'src [Token]> {
+    fn stmt<'src>(&mut self, tokens: &'src [Token]) -> EvalResult<&'src [Token]> {
         if tokens.len() == 0 {
             Ok(tokens)
         } else if let Some((_, tail)) = eat_token(tokens, |t| t.kind == TokenKind::Let) {
             let (ident, tail) = eat_token(tail, Token::is_ident)
-                .ok_or_else(|| todo!("error: expected identifier"))?;
+                .ok_or_else(|| todo_error("expected identifier"))?;
             let (_eq, tail) = eat_token(tail, Token::is_eq)
-                .ok_or_else(|| todo!("error: expected `=`"))?;
+                .ok_or_else(|| todo_error("expected `=`"))?;
             let (value, tail) = self.expr(tail)?;
             self.env.define(ident, value)?;
             Ok(tail)
+        } else if let Some((_, tail)) = eat_token(tokens, |t| t.kind == TokenKind::Return) {
+            let (value, tail) = self.expr(tail)?;
+            Err(EvalBreak::Return(value))
         } else if let Some((_, tail)) = eat_token(tokens, Token::is_semi) {
             Ok(tail)
         } else {
@@ -168,9 +193,9 @@ impl Interpreter {
             self.munch_calls(value, tail)
         } else if let Some((_obj, tail)) = eat_token(tokens, |t| t.kind == TokenKind::Object) {
             let (name, tail) = eat_token(tail, |t| t.kind == TokenKind::Ident)
-                .ok_or_else(|| todo!("error: expected identifier"))?;
+                .ok_or_else(|| todo_error("expected identifier"))?;
             let (_left_curly, tail) = eat_token(tail, Token::is_left_brace)
-                .ok_or_else(|| todo!("error: expected left curly"))?;
+                .ok_or_else(|| todo_error("expected left curly"))?;
             let (matchers, tail) = self.munch_object_contents(tail)?;
             let muncher = compile_object_muncher(matchers, 0)?;
             let object = Value::Object(Rc::new(Object {
@@ -201,7 +226,7 @@ impl Interpreter {
                     tokens = next_tokens;
                 }
                 MunchOutput::Failed => {
-                    todo!("error: failed call");
+                    todo_error("failed call");
                 }
                 MunchOutput::FailedEval { error } => return Err(error),
             }
@@ -219,8 +244,8 @@ impl Interpreter {
             env,
             intrinsics: self.intrinsics.clone(),
         };
-        let return_value = block_interp.block(block)?;
-        self.munch_calls(return_value, tokens)
+        let returned_value = block_interp.block(block)?;
+        self.munch_calls(returned_value, tokens)
     }
 
     fn munch_object_contents<'src>(&mut self, mut tokens: &'src [Token]) -> Result<(Vec<Matcher>, &'src [Token])> {
@@ -233,11 +258,11 @@ impl Interpreter {
             while !tokens[0].is_left_brace() && !tokens[0].is_right_brace() {
                 if tokens[0].is_dollar() {
                     let (bind, tail) = eat_token(&tokens[1..], |t| t.kind == TokenKind::Ident)
-                        .ok_or_else(|| todo!("error: expected identifier (var)"))?;
+                        .ok_or_else(|| todo_error("expected identifier (var)"))?;
                     let (_colon, tail) = eat_token(tail, Token::is_colon)
-                        .ok_or_else(|| todo!("error: expected colon"))?;
+                        .ok_or_else(|| todo_error("expected colon"))?;
                     let (kind, tail) = eat_token(tail, |t| t.kind == TokenKind::Ident)
-                        .ok_or_else(|| todo!("error: expected identifier (muncher)"))?;
+                        .ok_or_else(|| todo_error("expected identifier (muncher)"))?;
                     pattern.push(Pattern::Var { kind, bind });
                     tokens = tail;
                 } else {
@@ -246,7 +271,7 @@ impl Interpreter {
                 }
             }
             if tokens[0].is_right_brace() {
-                todo!("error: method is missing its body");
+                todo_error("method is missing its body");
             }
             let (body, rest) = self.munch_source_block(&tokens[1..]);
             tokens = rest;
@@ -297,10 +322,10 @@ fn compile_object_muncher(matchers: Vec<Matcher>, idx: usize) -> Result<Rc<dyn M
         }
     }
     if done.len() > 1 {
-        todo!("error: multiple matchers are identical");
+        todo_error("multiple matchers are identical");
     }
     if done.len() > 0 && (simple.len() > 0 || meta.len() > 0) {
-        todo!("error: matcher is prefix of other matcher");
+        todo_error("matcher is prefix of other matcher");
     }
     if done.len() > 0 {
         return Ok(Rc::new(crate::muncher::CompleteMuncher {
@@ -308,7 +333,7 @@ fn compile_object_muncher(matchers: Vec<Matcher>, idx: usize) -> Result<Rc<dyn M
         }));
     }
     if simple.len() > 0 && meta.len() > 0 {
-        todo!("error: overlapping matchers");
+        todo_error("overlapping matchers");
     }
     if simple.len() > 0 {
         simple.sort_by(|a, b| a.0.source.cmp(&b.0.source));
@@ -336,7 +361,7 @@ fn compile_object_muncher(matchers: Vec<Matcher>, idx: usize) -> Result<Rc<dyn M
         return Ok(Rc::new(crate::muncher::PlainMuncher { cases }));
     }
     if meta.iter().any(|(kind, _, _)| kind.source != meta[0].0.source) {
-        todo!("error: meta matchers branch out");
+        todo_error("meta matchers branch out");
     }
     let bind = meta[0].1.clone();
     let cont = compile_object_muncher(meta.into_iter().map(|t| t.2).collect(), idx + 1)?;
