@@ -1,5 +1,6 @@
-use logos::Logos;
+use std::fmt;
 use std::rc::Rc;
+use logos::Logos;
 use crate::{Pos, Result, Span, Error, SourceBlock, interpreter::Env};
 
 #[derive(Logos, Debug, PartialEq, Eq, Clone, Copy)]
@@ -72,6 +73,22 @@ impl Token {
 
     pub(crate) fn is_colon(&self) -> bool {
         &*self.source == ":"
+    }
+}
+
+impl fmt::Display for Token {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self.kind {
+            TokenKind::Ident => write!(f, "identifier"),
+            TokenKind::String => write!(f, "string"),
+            TokenKind::Symbol => write!(f, "`{}`", self.source),
+            TokenKind::Object => write!(f, "`object`"),
+            TokenKind::This => write!(f, "`this`"),
+            TokenKind::Return => write!(f, "`return`"),
+            TokenKind::Let => write!(f, "`let`"),
+            TokenKind::Whitespace => write!(f, "whitespace"),
+            TokenKind::Error => write!(f, "bad token"),
+        }
     }
 }
 

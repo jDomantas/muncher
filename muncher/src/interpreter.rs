@@ -1,7 +1,7 @@
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
-use crate::{Value, Block, Intrinsic, SourceBlock, Result, Error, Intrinsics, Object, Span};
+use crate::{Value, Block, Intrinsic, SourceBlock, Result, Error, Intrinsics, Object, Span, Pos};
 use crate::lexer::{Token, TokenKind};
 use crate::muncher::{MunchOutput, Muncher};
 
@@ -24,11 +24,17 @@ fn todo_error(message: &str) -> Error {
 type EvalResult<T> = std::result::Result<T, EvalBreak>;
 
 fn double_def(token: Token) -> Error {
-    todo_error("double def")
+    Error {
+        msg: format!("variable `{}` is already defined in this scope", token.source),
+        span: token.span,
+    }
 }
 
 fn undefined_var(token: Token) -> Error {
-    todo!("error: undefined var {}", token.source)
+    Error {
+        msg: format!("variable `{}` is not defined", token.source),
+        span: token.span,
+    }
 }
 
 #[derive(Debug)]
@@ -274,7 +280,7 @@ impl Interpreter {
         while !tokens.at(Token::is_right_brace) {
             let mut pattern = Vec::new();
             if !can_start_call(&tokens.peek().unwrap()) {
-                todo!("error: can't start call with token {:?}", tokens.peek().unwrap().source);
+                return Err(tokens.error(&format!("can't start call with {}", tokens.peek().unwrap())));
             }
             while !tokens.at(Token::is_left_brace) && !tokens.at(Token::is_right_brace) {
                 if let Some(_dollar) = tokens.check(Token::is_dollar) {
@@ -287,7 +293,7 @@ impl Interpreter {
                 }
             }
             if tokens.at(Token::is_right_brace) {
-                todo_error("method is missing its body");
+                return Err(tokens.error("missing method body"));
             }
             tokens.advance();
             let body = self.munch_source_block(tokens);
@@ -353,7 +359,7 @@ impl Tokens {
         if self.at(pred) {
             Ok(self.advance())
         } else {
-            todo!("expected {}", msg)
+            Err(self.error(&format!("expected {}", msg)))
         }
     }
 
@@ -368,6 +374,28 @@ impl Tokens {
     fn prev_span(&self) -> Span {
         assert!(self.idx > 0);
         self.tokens[self.idx - 1].span
+    }
+
+    /// Create an error on next token.
+    pub(crate) fn error(&self, msg: &str) -> Error {
+        assert!(self.tokens.len() > 0);
+        let span = self.tokens
+            .get(self.idx)
+            .map(|t| t.span)
+            .or_else(|| self.tokens
+                .get(self.idx - 1)
+                .map(|t| Span {
+                    start: t.span.end,
+                    end: Pos {
+                        line: t.span.end.line,
+                        col: t.span.end.col + 1,
+                    }
+                }))
+            .unwrap();
+        Error {
+            msg: msg.to_owned(),
+            span,
+        }
     }
 
     pub(crate) fn debug(&self, msg: &str) {
