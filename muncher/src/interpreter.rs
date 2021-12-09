@@ -23,11 +23,20 @@ fn todo_error(message: &str) -> Error {
 
 type EvalResult<T> = std::result::Result<T, EvalBreak>;
 
-fn double_def(token: Token) -> Error {
+fn double_def(token: Token, prev: Option<Span>) -> Error {
     Error {
         msg: format!("variable `{}` is already defined in this scope", token.source),
         span: token.span,
-        notes: Vec::new(),
+        notes: if let Some(span) = prev {
+            Vec::from([
+                Note {
+                    msg: "previous definition here".to_owned(),
+                    span,
+                },
+            ])
+        } else {
+            Vec::new()
+        },
     }
 }
 
@@ -40,24 +49,33 @@ fn undefined_var(token: Token) -> Error {
 }
 
 #[derive(Debug)]
+struct Def {
+    value: Value,
+    span: Option<Span>,
+}
+
+#[derive(Debug)]
 struct EnvInner {
-    values: RefCell<HashMap<Rc<str>, Value>>,
+    values: RefCell<HashMap<Rc<str>, Def>>,
     next: Option<Rc<EnvInner>>,
 }
 
 impl EnvInner {
     fn define(&self, ident: Token, value: Value) -> Result<()> {
-        let prev = self.values.borrow_mut().insert(ident.source.clone(), value);
-        if prev.is_none() {
-            Ok(())
+        let prev = self.values.borrow_mut().insert(
+            ident.source.clone(),
+            Def { value, span: Some(ident.span) },
+        );
+        if let Some(prev) = prev {
+            Err(double_def(ident, prev.span))
         } else {
-            Err(double_def(ident))
+            Ok(())
         }
     }
 
     fn get_raw(&self, var: &str) -> Option<Value> {
-        if let Some(value) = self.values.borrow().get(var).cloned() {
-            Some(value)
+        if let Some(def) = self.values.borrow().get(var) {
+            Some(def.value.clone())
         } else {
             self.next.as_ref().and_then(|e| e.get_raw(var))
         }
@@ -66,7 +84,7 @@ impl EnvInner {
     fn set(&self, ident: Token, value: Value) -> Result<()> {
         let mut values = self.values.borrow_mut();
         if values.contains_key(&ident.source) {
-            values.insert(ident.source, value);
+            values.get_mut(&ident.source).unwrap().value = value;
             return Ok(());
         } else if let Some(env) = &self.next {
             env.set(ident, value)
@@ -121,7 +139,7 @@ impl Env {
     }
 
     pub(crate) fn define_raw(&self, name: &str, value: Value) {
-        self.inner.values.borrow_mut().insert(name.into(), value);
+        self.inner.values.borrow_mut().insert(name.into(), Def { value, span: None });
     }
 }
 
@@ -285,7 +303,7 @@ impl Interpreter {
         let span = value.span.union(tokens.prev_span());
         let env = Env {
             inner: Rc::new(EnvInner {
-                values: env.inner.values.clone(),
+                values: Rc::try_unwrap(env.inner).unwrap().values,
                 next: match &*block {
                     Block::Source(s) => Some(s.closure.inner.clone()),
                     Block::Intrinsic(_) => None,
