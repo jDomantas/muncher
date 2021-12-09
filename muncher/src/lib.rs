@@ -42,6 +42,7 @@ impl Value {
         match self {
             Value::Int(i) => Rc::new(muncher::NumMuncher { value: *i }),
             Value::Bool(b) => Rc::new(muncher::BoolMuncher { value: *b }),
+            Value::Block(b) => Rc::new(muncher::BlockCallMuncher { value: b.clone() }),
             Value::Object(o) => o.muncher.clone(),
             _ => Rc::new(muncher::NoMuncher),
         }
@@ -146,10 +147,10 @@ pub fn eval(source: &str, intrinsics: Rc<dyn Intrinsics>) -> Result<()> {
         env: env.clone(),
         intrinsics,
     };
-    interp.block(Rc::new(Block::Source(SourceBlock {
+    interp.block(&Block::Source(SourceBlock {
         closure: env.clone(),
         tokens,
-    })))?;
+    }))?;
     Ok(())
 }
 

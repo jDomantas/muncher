@@ -129,8 +129,8 @@ pub(crate) struct Interpreter {
 }
 
 impl Interpreter {
-    pub(crate) fn block(&mut self, block: Rc<Block>) -> Result<Value> {
-        match &*block {
+    pub(crate) fn block(&mut self, block: &Block) -> Result<Value> {
+        match block {
             Block::Source(s) => match self.source_block(s) {
                 Ok(()) => Ok(Value::Nil),
                 Err(EvalBreak::Error(err)) => Err(err),
@@ -269,7 +269,7 @@ impl Interpreter {
             env,
             intrinsics: self.intrinsics.clone(),
         };
-        let returned_value = block_interp.block(block)?;
+        let returned_value = block_interp.block(&block)?;
         let spanned = SpannedValue {
             value: returned_value,
             span,
@@ -298,7 +298,7 @@ impl Interpreter {
                 return Err(tokens.error("missing method body"));
             }
             tokens.advance();
-            let body = self.munch_source_block(tokens);
+            let body = self.munch_source_block_inner(tokens);
             let body = Rc::new(Block::Source(body));
             matchers.push(Matcher { pattern, body });
         }
@@ -306,7 +306,7 @@ impl Interpreter {
         Ok(matchers)
     }
 
-    fn munch_source_block(&mut self, tokens: &mut Tokens) -> SourceBlock {
+    fn munch_source_block_inner(&mut self, tokens: &mut Tokens) -> SourceBlock {
         let mut contents = Vec::new();
         let mut depth = 0;
         while depth != 0 || !tokens.peek().unwrap().is_right_brace() {
@@ -322,6 +322,11 @@ impl Interpreter {
             closure: self.env.clone(),
             tokens: contents,
         }
+    }
+
+    pub(crate) fn munch_source_block(&mut self, tokens: &mut Tokens) -> Result<SourceBlock> {
+        tokens.expect(Token::is_left_brace, "block")?;
+        Ok(self.munch_source_block_inner(tokens))
     }
 }
 
@@ -467,9 +472,18 @@ fn compile_object_muncher(matchers: Vec<Matcher>, idx: usize) -> Result<Rc<dyn M
     if meta.iter().any(|(kind, _, _)| kind.source != meta[0].0.source) {
         todo_error("meta matchers branch out");
     }
+    let kind = &*meta[0].0.source;
+    let make_muncher: fn(_, _) -> Rc<dyn Muncher> = match kind {
+        "expr" => |bind, cont| Rc::new(crate::muncher::ExprMuncher { bind, cont }),
+        "block" => |bind, cont| Rc::new(crate::muncher::BlockMuncher { bind, cont }),
+        _ => return Err(Error {
+            msg: format!("invalid muncher type"),
+            span: meta[0].0.span,
+        }),
+    };
     let bind = meta[0].1.clone();
     let cont = compile_object_muncher(meta.into_iter().map(|t| t.2).collect(), idx + 1)?;
-    Ok(Rc::new(crate::muncher::ExprMuncher { bind, cont }))
+    Ok(make_muncher(bind, cont))
 }
 
 #[derive(Clone)]

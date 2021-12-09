@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use std::rc::Rc;
-use crate::{Block, Error, Intrinsic, Value, Span};
+use crate::{Block, Error, Intrinsic, Value, Span, SourceBlock};
 use crate::interpreter::{Env, Interpreter, Tokens};
 use crate::lexer::{Token, TokenKind};
 
@@ -102,6 +102,29 @@ impl Muncher for ExprMuncher {
             Err(error) => return Err(MunchOutput::FailedEval { error }),
         };
         env.define(self.bind.clone(), value).unwrap();
+        Ok(MunchOutput::Continue {
+            muncher: self.cont.clone(),
+        })
+    }
+}
+
+pub(crate) struct BlockMuncher {
+    pub(crate) bind: Token,
+    pub(crate) cont: Rc<dyn Muncher>,
+}
+
+impl Muncher for BlockMuncher {
+    fn munch_inner(
+        &self,
+        tokens: &mut Tokens,
+        env: &Env,
+        caller: &mut Interpreter,
+    ) -> Result<MunchOutput, MunchOutput> {
+        let block = match caller.munch_source_block(tokens) {
+            Ok(x) => Value::Block(Rc::new(Block::Source(x))),
+            Err(error) => return Err(MunchOutput::FailedEval { error }),
+        };
+        env.define(self.bind.clone(), block).unwrap();
         Ok(MunchOutput::Continue {
             muncher: self.cont.clone(),
         })
@@ -230,6 +253,29 @@ impl Muncher for BoolMuncher {
 
         let result = if self.value { value1 } else { value2 };
 
+        Ok(MunchOutput::Done {
+            block: Rc::new(Block::Intrinsic(Intrinsic::Value(result))),
+        })
+    }
+}
+
+pub(crate) struct BlockCallMuncher {
+    pub(crate) value: Rc<Block>,
+}
+
+impl Muncher for BlockCallMuncher {
+    fn munch_inner(
+        &self,
+        tokens: &mut Tokens,
+        env: &Env,
+        caller: &mut Interpreter,
+    ) -> Result<MunchOutput, MunchOutput> {
+        tokens.expect(Token::is_dot, "`.`").map_err(|_| MunchOutput::Failed)?;
+        tokens.expect(|t| &*t.source == "exec", "`exec`").map_err(|_| MunchOutput::Failed)?;
+        let result = match caller.block(&self.value) {
+            Ok(value) => value,
+            Err(error) => return Err(MunchOutput::FailedEval { error }),
+        };
         Ok(MunchOutput::Done {
             block: Rc::new(Block::Intrinsic(Intrinsic::Value(result))),
         })
