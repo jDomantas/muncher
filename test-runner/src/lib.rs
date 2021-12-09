@@ -59,7 +59,7 @@ fn check_program_run(
         if actual_out != stdout {
             println!("stdout of {} changed", path.display());
             let stdout_path = add_extension(path, "stdout");
-            std::fs::write(&stdout_path, actual_err.as_bytes())
+            std::fs::write(&stdout_path, actual_out.as_bytes())
                 .expect(&format!("failed to write {}", stdout_path.display()));
         }
     } else {

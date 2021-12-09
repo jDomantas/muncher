@@ -121,7 +121,7 @@ impl Node {
     pub(crate) fn done(&mut self, span: Span, bindings: Vec<Token>, block: Rc<Block>) -> Result<()> {
         match &self.done {
             Some(done) => Err(Error {
-                msg: format!("methods already defined"),
+                msg: format!("method already defined"),
                 span,
                 notes: Vec::from([
                     Note {
