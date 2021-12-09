@@ -1,0 +1,24 @@
+let if = object If {
+    ($cond:expr) $then:block else $else:block {
+        cond.pick(then, else).exec;
+    }
+};
+
+let for = object For {
+    ($binding:ident from $start:expr to $end:expr) $body:block {
+        let iterate = object ForIterate {
+            ($iter:expr) {
+                if (iter.le(end)) {
+                    body.def(binding, iter).exec;
+                    iterate(iter.add(1));
+                } else {}
+            }
+        };
+        iterate(start);
+    }
+};
+
+for (i from 1 to 10) {
+    print(i);
+    print("\n");
+}
