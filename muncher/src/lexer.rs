@@ -21,6 +21,8 @@ pub(crate) enum TokenKind {
     Let,
     #[regex(r"[ \t\r\n]+")]
     Whitespace,
+    #[regex(r"//[^\n]*")]
+    Comment,
     #[error]
     Error,
 }
@@ -91,6 +93,7 @@ impl fmt::Display for Token {
             TokenKind::Return => write!(f, "`return`"),
             TokenKind::Let => write!(f, "`let`"),
             TokenKind::Whitespace => write!(f, "whitespace"),
+            TokenKind::Comment => write!(f, "comment"),
             TokenKind::Error => write!(f, "bad token"),
         }
     }
@@ -112,7 +115,7 @@ fn lex(source: &str) -> Result<Vec<Token>> {
         }
         let span = Span { start, end: pos };
         match kind {
-            TokenKind::Whitespace => {}
+            TokenKind::Whitespace | TokenKind::Comment => {}
             TokenKind::Error => return Err(Error {
                 msg: "bad token".into(),
                 span,
