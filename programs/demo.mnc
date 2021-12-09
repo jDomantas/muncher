@@ -1,0 +1,74 @@
+let println = object Println { ($e:expr) { print(e); print("\n"); } };
+
+let a = object A {
+    .foo() {
+        print("called A.foo()\n");
+    }
+    .bar($e:expr) {
+        print("called A.bar(");
+        print(e);
+        print(")\n");
+    }
+    .call me maybe {
+        print("called\n");
+    }
+    .2u23r0ru4jdfo779*&*(&*()) {
+        print("abomination\n");
+    }
+};
+
+print(a);
+print("\n");
+a.foo();
+a.bar(123);
+
+a.call me maybe;
+a.2u23r0ru4jdfo779*&*(&*());
+
+println(true);
+println(false);
+println(true.pick(1, 2));
+println(false.pick(1, 2));
+
+let emptyBlock = object Wtf { .$b:block { return b; } } . {};
+
+let if = object If {
+    ($cond:expr) $then:block {
+        cond.pick(then, emptyBlock).exec;
+    }
+    ($cond:expr) $then:block else $else:block {
+        cond.pick(then, else).exec;
+    }
+};
+
+if (true) {
+    println("whatever");
+}
+
+if (false) {
+    println("whatever 2");
+}
+
+if (false) {
+    println("was true");
+} else {
+    println("was false");
+}
+
+let for = object For {
+    ($binding:ident from $start:expr to $end:expr) $body:block {
+        let iterate = object Iterate {
+            ($iter:expr) {
+                if (iter.le(end)) {
+                    body.def(binding, iter).exec;
+                    iterate(iter.add(1));
+                }
+            }
+        };
+        iterate(start);
+    }
+};
+
+for (i from 0 to 10) {
+    println(i);
+}
