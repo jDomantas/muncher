@@ -253,10 +253,11 @@ impl Interpreter {
                     let mut field = None;
                     this.value.on_field(&ident.source, |f| field = Some(f.clone()));
                     let span = this.span.union(ident.span);
-                    Ok(SpannedValue {
+                    let value = SpannedValue {
                         value: field.unwrap(),
                         span,
-                    })
+                    };
+                    self.munch_calls(value, tokens)
                 }
             } else {
                 self.munch_calls(this, tokens)
