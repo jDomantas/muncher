@@ -227,9 +227,13 @@ impl Interpreter {
                 span: obj.span.union(tokens.prev_span()),
             };
             self.munch_calls(spanned, tokens)
+        } else if let Some(left) = tokens.check(Token::is_left_paren) {
+            let value = self.expr(tokens)?.value;
+            let right = tokens.expect(Token::is_right_paren, "`)`")?;
+            let span = left.span.union(right.span);
+            Ok(SpannedValue { value, span })
         } else {
-            println!("{:?}", tokens.peek());
-            todo!("error: expected expression")
+            return Err(tokens.error("expected expression"));
         }
     }
 
