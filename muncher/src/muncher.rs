@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::rc::Rc;
 use crate::{Block, Error, Intrinsic, Value, Span, SourceBlock};
-use crate::interpreter::{Env, Interpreter, Tokens};
+use crate::interpreter::{Env, Interpreter, Tokens, SpannedValue};
 use crate::lexer::{Token, TokenKind};
 
 pub(crate) enum MunchOutput {
@@ -13,6 +13,12 @@ pub(crate) enum MunchOutput {
     },
     Failed,
     FailedEval { error: Error },
+}
+
+impl From<Error> for MunchOutput {
+    fn from(error: Error) -> Self {
+        Self::FailedEval { error }
+    }
 }
 
 pub(crate) trait Muncher {
@@ -97,10 +103,7 @@ impl Muncher for ExprMuncher {
         env: &Env,
         caller: &mut Interpreter,
     ) -> Result<MunchOutput, MunchOutput> {
-        let value = match caller.expr(tokens) {
-            Ok(x) => x.value,
-            Err(error) => return Err(MunchOutput::FailedEval { error }),
-        };
+        let value = caller.expr(tokens)?.value;
         env.define(self.bind.clone(), value).unwrap();
         Ok(MunchOutput::Continue {
             muncher: self.cont.clone(),
@@ -120,11 +123,30 @@ impl Muncher for BlockMuncher {
         env: &Env,
         caller: &mut Interpreter,
     ) -> Result<MunchOutput, MunchOutput> {
-        let block = match caller.munch_source_block(tokens) {
-            Ok(x) => Value::Block(Rc::new(Block::Source(x))),
-            Err(error) => return Err(MunchOutput::FailedEval { error }),
-        };
+        let source_block = caller.munch_source_block(tokens)?;
+        let block = Value::Block(Rc::new(Block::Source(source_block)));
         env.define(self.bind.clone(), block).unwrap();
+        Ok(MunchOutput::Continue {
+            muncher: self.cont.clone(),
+        })
+    }
+}
+
+pub(crate) struct IdentMuncher {
+    pub(crate) bind: Token,
+    pub(crate) cont: Rc<dyn Muncher>,
+}
+
+impl Muncher for IdentMuncher {
+    fn munch_inner(
+        &self,
+        tokens: &mut Tokens,
+        env: &Env,
+        caller: &mut Interpreter,
+    ) -> Result<MunchOutput, MunchOutput> {
+        let ident = tokens.expect(Token::is_ident, "identifier")?;
+        let value = Value::Ident(ident.source);
+        env.define(self.bind.clone(), value).unwrap();
         Ok(MunchOutput::Continue {
             muncher: self.cont.clone(),
         })
@@ -141,10 +163,7 @@ impl Muncher for PrintMuncher {
         caller: &mut Interpreter,
     ) -> Result<MunchOutput, MunchOutput> {
         tokens.expect(Token::is_left_paren, "`(`").map_err(|_| MunchOutput::Failed)?;
-        let value = match caller.expr(tokens) {
-            Ok(x) => x.value,
-            Err(error) => return Err(MunchOutput::FailedEval { error }),
-        };
+        let value = caller.expr(tokens)?.value;
         tokens.expect(Token::is_right_paren, "`)`").map_err(|_| MunchOutput::Failed)?;
         Ok(MunchOutput::Done {
             block: Rc::new(Block::Intrinsic(Intrinsic::Print(value.to_string()))),
@@ -271,13 +290,52 @@ impl Muncher for BlockCallMuncher {
         caller: &mut Interpreter,
     ) -> Result<MunchOutput, MunchOutput> {
         tokens.expect(Token::is_dot, "`.`").map_err(|_| MunchOutput::Failed)?;
-        tokens.expect(|t| &*t.source == "exec", "`exec`").map_err(|_| MunchOutput::Failed)?;
-        let result = match caller.block(&self.value) {
-            Ok(value) => value,
-            Err(error) => return Err(MunchOutput::FailedEval { error }),
-        };
-        Ok(MunchOutput::Done {
-            block: Rc::new(Block::Intrinsic(Intrinsic::Value(result))),
-        })
+        match tokens
+            .peek()
+            .filter(|t| t.kind == TokenKind::Ident)
+            .map(|t| &*t.source)
+        {
+            Some("exec") => {
+                tokens.advance();
+                let result = match caller.block_with_closure(&self.value) {
+                    Ok(value) => value,
+                    Err(error) => return Err(MunchOutput::FailedEval { error }),
+                };
+                Ok(MunchOutput::Done {
+                    block: Rc::new(Block::Intrinsic(Intrinsic::Value(result))),
+                })
+            }
+            Some("def") => {
+                tokens.advance();
+                tokens.expect(Token::is_left_paren, "`(`")?;
+                let ident = match caller.expr(tokens)? {
+                    SpannedValue { span, value: Value::Ident(i) } => i,
+                    SpannedValue { span, value } => return Err(MunchOutput::FailedEval {
+                        error: Error {
+                            msg: format!("expected identifier, got {}", value),
+                            span,
+                        },
+                    }),
+                };
+                tokens.expect(Token::is_comma, "`,`")?;
+                let value = caller.expr(tokens)?.value;
+                tokens.expect(Token::is_right_paren, "`)`")?;
+                let block = match &*self.value {
+                    Block::Source(src) => Rc::new(Block::Source(SourceBlock {
+                        closure: {
+                            let env = src.closure.scope();
+                            env.define_raw(&ident, value);
+                            env
+                        },
+                        tokens: src.tokens.clone(),
+                    })),
+                    Block::Intrinsic(_) => self.value.clone(),
+                };
+                Ok(MunchOutput::Done {
+                    block: Rc::new(Block::Intrinsic(Intrinsic::Value(Value::Block(block)))),
+                })
+            }
+            _ => return Err(MunchOutput::Failed),
+        }
     }
 }

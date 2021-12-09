@@ -72,7 +72,7 @@ enum Block {
 #[derive(Clone)]
 struct SourceBlock {
     closure: Env,
-    tokens: Vec<Token>,
+    tokens: Rc<[Token]>,
 }
 
 impl fmt::Debug for SourceBlock {
@@ -147,10 +147,13 @@ pub fn eval(source: &str, intrinsics: Rc<dyn Intrinsics>) -> Result<()> {
         env: env.clone(),
         intrinsics,
     };
-    interp.block(&Block::Source(SourceBlock {
-        closure: env.clone(),
-        tokens,
-    }))?;
+    interp.block_with_env(
+        &Block::Source(SourceBlock {
+            closure: env.clone(),
+            tokens: tokens.into(),
+        }),
+        env,
+    )?;
     Ok(())
 }
 

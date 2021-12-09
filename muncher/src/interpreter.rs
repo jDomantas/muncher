@@ -118,7 +118,7 @@ impl Env {
         }
     }
 
-    pub(crate) fn define_raw(&self, name: &'static str, value: Value) {
+    pub(crate) fn define_raw(&self, name: &str, value: Value) {
         self.inner.values.borrow_mut().insert(name.into(), value);
     }
 }
@@ -129,7 +129,22 @@ pub(crate) struct Interpreter {
 }
 
 impl Interpreter {
-    pub(crate) fn block(&mut self, block: &Block) -> Result<Value> {
+    pub(crate) fn block_with_closure(&mut self, block: &Block) -> Result<Value> {
+        match block {
+            Block::Source(s) => self.block_with_env(block, s.closure.clone()),
+            Block::Intrinsic(_) => self.block_inner(block),
+        }
+    }
+
+    pub(crate) fn block_with_env(&mut self, block: &Block, env: Env) -> Result<Value> {
+        let mut block_interp = Interpreter {
+            env,
+            intrinsics: self.intrinsics.clone(),
+        };
+        block_interp.block_inner(&block)
+    }
+
+    fn block_inner(&mut self, block: &Block) -> Result<Value> {
         match block {
             Block::Source(s) => match self.source_block(s) {
                 Ok(()) => Ok(Value::Nil),
@@ -269,11 +284,7 @@ impl Interpreter {
                 },
             }),
         };
-        let mut block_interp = Interpreter {
-            env,
-            intrinsics: self.intrinsics.clone(),
-        };
-        let returned_value = block_interp.block(&block)?;
+        let returned_value = self.block_with_env(&block, env)?;
         let spanned = SpannedValue {
             value: returned_value,
             span,
@@ -324,7 +335,7 @@ impl Interpreter {
         tokens.advance();
         SourceBlock {
             closure: self.env.clone(),
-            tokens: contents,
+            tokens: contents.into(),
         }
     }
 
@@ -340,7 +351,7 @@ pub(crate) struct SpannedValue {
 }
 
 pub(crate) struct Tokens {
-    tokens: Vec<Token>,
+    tokens: Rc<[Token]>,
     idx: usize,
 }
 
@@ -480,6 +491,7 @@ fn compile_object_muncher(matchers: Vec<Matcher>, idx: usize) -> Result<Rc<dyn M
     let make_muncher: fn(_, _) -> Rc<dyn Muncher> = match kind {
         "expr" => |bind, cont| Rc::new(crate::muncher::ExprMuncher { bind, cont }),
         "block" => |bind, cont| Rc::new(crate::muncher::BlockMuncher { bind, cont }),
+        "ident" => |bind, cont| Rc::new(crate::muncher::IdentMuncher { bind, cont }),
         _ => return Err(Error {
             msg: format!("invalid muncher type"),
             span: meta[0].0.span,
