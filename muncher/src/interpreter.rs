@@ -267,12 +267,12 @@ impl Interpreter {
             };
             self.munch_calls(spanned, tokens)
         } else if let Some(obj) = tokens.check(|t| t.kind == TokenKind::Object) {
-            let name = tokens.expect(Token::is_ident, "identifier")?;
+            let name = tokens.check(Token::is_ident).map(|t| t.source);
             tokens.expect(Token::is_left_brace, "`{`")?;
             let (properties, matchers) = self.munch_object_contents(tokens)?;
             let muncher = compile_object_muncher(matchers)?;
             let object = Value::Object(Rc::new(Object {
-                name: name.source,
+                name,
                 properties: RefCell::new(properties),
                 muncher,
             }));

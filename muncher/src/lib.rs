@@ -76,7 +76,10 @@ impl fmt::Display for Value {
             Value::String(s) => write!(f, "{}", s),
             Value::Ident(i) => write!(f, "<Ident {}>", i),
             Value::Block(_) => write!(f, "<Block>"),
-            Value::Object(o) => write!(f, "<Object {}>", o.name),
+            Value::Object(o) => match &o.name {
+                Some(name) => write!(f, "<Object {}>", name),
+                None => write!(f, "<Object>"),
+            },
         }
     }
 }
@@ -108,7 +111,7 @@ enum Intrinsic {
 }
 
 struct Object {
-    name: Rc<str>,
+    name: Option<Rc<str>>,
     properties: RefCell<HashMap<Rc<str>, Value>>,
     muncher: Rc<dyn Muncher>,
 }
@@ -177,7 +180,7 @@ pub fn eval(source: &str, intrinsics: Rc<dyn Intrinsics>) -> Result<()> {
     let tokens = lexer::lex_program(source)?;
     let env = Env::new();
     env.define_raw("print", Value::Object(Rc::new(Object {
-        name: "Print".into(),
+        name: Some("Print".into()),
         properties: Default::default(),
         muncher: Rc::new(muncher::PrintMuncher),
     })));
