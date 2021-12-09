@@ -246,7 +246,8 @@ impl Interpreter {
             let value = self.expr(tokens)?.value;
             let right = tokens.expect(Token::is_right_paren, "`)`")?;
             let span = left.span.union(right.span);
-            Ok(SpannedValue { value, span })
+            let spanned = SpannedValue { value, span };
+            self.munch_calls(spanned, tokens)
         } else {
             return Err(tokens.error("expected expression"));
         }

@@ -1,6 +1,8 @@
+let emptyBlock = (object Wtf { .$b:block { return b } }).{};
+
 let if = object If {
-    ($cond:expr) $then:block else $else:block {
-        cond.pick(then, else).exec;
+    ($cond:expr) $then:block {
+        cond.pick(then, emptyBlock).exec;
     }
 };
 
@@ -11,7 +13,7 @@ let for = object For {
                 if (iter.le(end)) {
                     body.def(binding, iter).exec;
                     iterate(iter.add(1));
-                } else {}
+                }
             }
         };
         iterate(start);
