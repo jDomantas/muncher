@@ -159,6 +159,31 @@ impl TrieMuncher {
             block: done.block.clone(),
         })
     }
+
+    fn format_expectations(&self) -> String {
+        let mut expectations = Vec::new();
+        let node = self.trie.borrow();
+        for key in node.tokens.keys() {
+            expectations.push(format!("`{}`", key));
+        }
+        if node.expr.is_some() {
+            expectations.push("expression".to_owned());
+        }
+        if node.ident.is_some() {
+            expectations.push("identifier".to_owned());
+        }
+        if node.block.is_some() {
+            expectations.push("block".to_owned());
+        }
+        expectations.sort();
+        match expectations.as_slice() {
+            [] => panic!("no expectations"),
+            [single] => single.clone(),
+            [a, b] => format!("{} or {}", a, b),
+            [a, b, c] => format!("{}, {}, or {}", a, b, c),
+            [a, rest @ ..] => format!("{} or {} other options", a, rest.len()),
+        }
+    }
 }
 
 impl Muncher for TrieMuncher {
@@ -213,7 +238,7 @@ impl Muncher for TrieMuncher {
                     self.done(env)
                 } else {
                     Err(MunchOutput::Failed {
-                        error: tokens.error(&format!("unexpected input {:?}", token.source)),
+                        error: tokens.error(&format!("expected {}", self.format_expectations())),
                     })
                 }
             }
@@ -222,7 +247,7 @@ impl Muncher for TrieMuncher {
                     self.done(env)
                 } else {
                     Err(MunchOutput::Failed {
-                        error: tokens.error("expected more input"),
+                        error: tokens.error(&format!("expected {}", self.format_expectations())),
                     })
                 }
             }
