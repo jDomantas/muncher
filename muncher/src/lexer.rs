@@ -1,7 +1,7 @@
 use std::fmt;
 use std::rc::Rc;
 use logos::Logos;
-use crate::{Pos, Result, Span, Error, SourceBlock, interpreter::Env};
+use crate::{Pos, Result, Span, Error};
 
 #[derive(Logos, Debug, PartialEq, Eq, Clone, Copy)]
 pub(crate) enum TokenKind {

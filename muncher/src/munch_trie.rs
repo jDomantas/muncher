@@ -234,7 +234,7 @@ impl Muncher for TrieMuncher {
                             values,
                         })
                     })
-                } else if let Some(done) = &node.done {
+                } else if let Some(_) = &node.done {
                     self.done(env)
                 } else {
                     Err(MunchOutput::Failed {
@@ -243,7 +243,7 @@ impl Muncher for TrieMuncher {
                 }
             }
             None => {
-                if let Some(done) = &node.done {
+                if let Some(_) = &node.done {
                     self.done(env)
                 } else {
                     Err(MunchOutput::Failed {

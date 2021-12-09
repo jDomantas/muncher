@@ -16,11 +16,6 @@ impl From<Error> for EvalBreak {
     }
 }
 
-#[track_caller]
-fn todo_error(message: &str) -> Error {
-    todo!("{}", message)
-}
-
 type EvalResult<T> = std::result::Result<T, EvalBreak>;
 
 fn double_def(token: Token, prev: Option<Span>) -> Error {
@@ -448,6 +443,7 @@ impl Tokens {
         }
     }
 
+    #[allow(dead_code)]
     pub(crate) fn debug(&self, msg: &str) {
         println!("{}: {:?}", msg, self.tokens[self.idx..].iter().map(|t| &*t.source).collect::<Vec<_>>());
     }
@@ -457,7 +453,7 @@ fn compile_object_muncher(matchers: Vec<Matcher>, idx: usize) -> Result<Rc<dyn M
     if matchers.len() == 0 {
         return Ok(Rc::new(crate::muncher::NoMuncher));
     }
-    let mut trie = Rc::new(RefCell::new(crate::munch_trie::Node::default()));
+    let trie = Rc::new(RefCell::new(crate::munch_trie::Node::default()));
     for matcher in matchers {
         let mut trie = trie.clone();
         let mut bindings = Vec::new();
@@ -513,15 +509,6 @@ pub(crate) fn can_start_expr(token: &Token) -> bool {
     || token.kind == TokenKind::String
     || token.kind == TokenKind::Object
     || token.is_left_paren()
-}
-
-fn eat_token(tokens: &[Token], check: impl FnOnce(&Token) -> bool) -> Option<(Token, &[Token])> {
-    match tokens.get(0) {
-        Some(tok) if check(tok) => {
-            Some((tokens[0].clone(), &tokens[1..]))
-        }
-        _ => None,
-    }
 }
 
 fn eat_token3(

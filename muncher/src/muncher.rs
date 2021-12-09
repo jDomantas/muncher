@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use std::rc::Rc;
 use crate::{Block, Error, Intrinsic, Value, Span, SourceBlock};
 use crate::interpreter::{Env, Interpreter, Tokens, SpannedValue};
@@ -46,8 +45,8 @@ impl Muncher for NoMuncher {
     fn munch_inner(
         &self,
         tokens: &mut Tokens,
-        env: &Env,
-        caller: &mut Interpreter,
+        _env: &Env,
+        _caller: &mut Interpreter,
     ) -> Result<MunchOutput, MunchOutput> {
         Ok(MunchOutput::Failed {
             error: tokens.error("no methods are defined"),
@@ -61,7 +60,7 @@ impl Muncher for PrintMuncher {
     fn munch_inner(
         &self,
         tokens: &mut Tokens,
-        env: &Env,
+        _env: &Env,
         caller: &mut Interpreter,
     ) -> Result<MunchOutput, MunchOutput> {
         tokens.expect(Token::is_left_paren, "`(`").map_err(MunchOutput::failed)?;
@@ -81,7 +80,7 @@ impl Muncher for NumMuncher {
     fn munch_inner(
         &self,
         tokens: &mut Tokens,
-        env: &Env,
+        _env: &Env,
         caller: &mut Interpreter,
     ) -> Result<MunchOutput, MunchOutput> {
         tokens.expect(Token::is_dot, "`.`").map_err(MunchOutput::failed)?;
@@ -160,7 +159,7 @@ impl Muncher for BoolMuncher {
     fn munch_inner(
         &self,
         tokens: &mut Tokens,
-        env: &Env,
+        _env: &Env,
         caller: &mut Interpreter,
     ) -> Result<MunchOutput, MunchOutput> {
         tokens.expect(Token::is_dot, "`.`").map_err(MunchOutput::failed)?;
@@ -193,7 +192,7 @@ impl Muncher for BlockMuncher {
     fn munch_inner(
         &self,
         tokens: &mut Tokens,
-        env: &Env,
+        _env: &Env,
         caller: &mut Interpreter,
     ) -> Result<MunchOutput, MunchOutput> {
         tokens.expect(Token::is_dot, "`.`").map_err(MunchOutput::failed)?;
@@ -216,7 +215,7 @@ impl Muncher for BlockMuncher {
                 tokens.advance();
                 tokens.expect(Token::is_left_paren, "`(`")?;
                 let ident = match caller.expr(tokens)? {
-                    SpannedValue { span, value: Value::Ident(i) } => i,
+                    SpannedValue { value: Value::Ident(i), .. } => i,
                     SpannedValue { span, value } => return Err(MunchOutput::FailedEval {
                         error: Error {
                             msg: format!("expected identifier, got {}", value),

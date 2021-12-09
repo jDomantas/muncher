@@ -61,8 +61,8 @@ impl fmt::Display for Value {
             Value::Int(i) => write!(f, "{}", i),
             Value::Bool(b) => write!(f, "{}", b),
             Value::String(s) => write!(f, "{}", s),
-            Value::Ident(i) => write!(f, "<Ident {:?}>", i),
-            Value::Block(b) => write!(f, "<Block>"),
+            Value::Ident(i) => write!(f, "<Ident {}>", i),
+            Value::Block(_) => write!(f, "<Block>"),
             Value::Object(o) => write!(f, "<Object {}>", o.name),
         }
     }

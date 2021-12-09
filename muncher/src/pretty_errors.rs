@@ -1,8 +1,12 @@
-use std::{fmt, ops::Range};
+use std::ops::Range;
 
-use codespan_reporting::{diagnostic::{Diagnostic, Label, LabelStyle}, files::SimpleFiles, term::{termcolor::{NoColor, WriteColor}, Config, Styles, Chars}};
+use codespan_reporting::{
+    diagnostic::{Diagnostic, Label, LabelStyle},
+    files::SimpleFiles,
+    term::{termcolor::{WriteColor}, Config, Chars},
+};
 
-use crate::{Error, Span, Pos};
+use crate::{Error, Span};
 
 pub(crate) fn emit(
     error: &Error,
