@@ -1,7 +1,7 @@
 use std::fmt;
 use std::rc::Rc;
 use logos::Logos;
-use crate::{Pos, Result, Span, Error};
+use crate::{Pos, Result, Span, Error, Note};
 
 #[derive(Logos, Debug, PartialEq, Eq, Clone, Copy)]
 pub(crate) enum TokenKind {
@@ -134,9 +134,40 @@ fn lex(source: &str) -> Result<Vec<Token>> {
     Ok(tokens)
 }
 
+fn check_balance(tokens: &[Token]) -> Result<()> {
+    let mut stack = Vec::new();
+    for tok in tokens {
+        if tok.is_left_brace() {
+            stack.push((tok, "}"));
+        } else if tok.is_left_paren() {
+            stack.push((tok, ")"));
+        } else if tok.is_right_brace() || tok.is_right_paren() {
+            match stack.pop() {
+                None => return Err(Error {
+                    msg: "unopened delimiter".to_owned(),
+                    span: tok.span,
+                    notes: Vec::new(),
+                }),
+                Some((_, s)) if s == &*tok.source => {}
+                Some((open, _)) => return Err(Error {
+                    msg: "invalid delimiter".to_owned(),
+                    span: tok.span,
+                    notes: Vec::from([
+                        Note {
+                            msg: "currently open delimiter".to_owned(),
+                            span: open.span,
+                        }
+                    ]),
+                }),
+            }
+        }
+    }
+    Ok(())
+}
+
 pub(crate) fn lex_program(source: &str) -> Result<Vec<Token>> {
     let tokens = lex(source)?;
-    // TODO: verify that parentheses are balanced
+    check_balance(&tokens)?;
     Ok(tokens)
 }
 
