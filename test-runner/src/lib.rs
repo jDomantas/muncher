@@ -64,6 +64,8 @@ fn check_program_run(
         }
     } else {
         if actual_err != stderr {
+            eprintln!("expected error:\n{}", stderr);
+            eprintln!("actual error:\n{}", actual_err);
             panic!(
                 "program {} gave incorrect error, expected {:?}, got {:?}",
                 path.display(),
@@ -72,6 +74,8 @@ fn check_program_run(
             );
         }
         if actual_out != stdout {
+            eprintln!("expected output:\n{}", stdout);
+            eprintln!("actual output:\n{}", actual_out);
             panic!(
                 "program {} gave incorrect output, expected {:?}, got {:?}",
                 path.display(),

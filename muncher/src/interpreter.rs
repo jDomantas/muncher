@@ -320,10 +320,10 @@ impl Interpreter {
             if tokens.at(Token::is_right_brace) {
                 return Err(tokens.error("missing method body"));
             }
-            tokens.advance();
+            let left_brace = tokens.advance();
             let body = self.munch_source_block_inner(tokens);
             let body = Rc::new(Block::Source(body));
-            matchers.push(Matcher { pattern, body });
+            matchers.push(Matcher { pattern, left_brace, body });
         }
         tokens.advance();
         Ok(matchers)
@@ -378,7 +378,7 @@ impl Tokens {
         token
     }
 
-    pub(crate) fn at(&mut self, pred: impl FnOnce(&Token) -> bool) -> bool {
+    pub(crate) fn at(&self, pred: impl FnOnce(&Token) -> bool) -> bool {
         match self.peek() {
             Some(tok) => pred(tok),
             _ => false,
@@ -439,78 +439,38 @@ fn compile_object_muncher(matchers: Vec<Matcher>, idx: usize) -> Result<Rc<dyn M
     if matchers.len() == 0 {
         return Ok(Rc::new(crate::muncher::NoMuncher));
     }
-    let mut simple = Vec::new();
-    let mut meta = Vec::new();
-    let mut done = Vec::new();
+    let mut trie = Rc::new(RefCell::new(crate::munch_trie::Node::default()));
     for matcher in matchers {
-        match matcher.pattern.get(idx).cloned() {
-            Some(Pattern::Var { kind, bind }) => {
-                meta.push((kind, bind, matcher));
-            }
-            Some(Pattern::Token(tok)) => {
-                simple.push((tok, matcher));
-            }
-            None => {
-                done.push(matcher);
+        let mut trie = trie.clone();
+        let mut bindings = Vec::new();
+        for pattern in matcher.pattern {
+            match pattern {
+                Pattern::Var { kind, bind } => {
+                    let next_trie = match &*kind.source {
+                        "expr" => trie.borrow_mut().step_expr(kind.span)?,
+                        "ident" => trie.borrow_mut().step_ident(kind.span)?,
+                        "block" => trie.borrow_mut().step_block(kind.span)?,
+                        _ => return Err(Error {
+                            msg: format!("invalid muncher type"),
+                            span: kind.span,
+                            notes: Vec::new(),
+                        }),
+                    };
+                    trie = next_trie;
+                    bindings.push(bind);
+                }
+                Pattern::Token(tok) => {
+                    let next_trie = trie.borrow_mut().step_token(&tok)?;
+                    trie = next_trie;
+                }
             }
         }
+        trie.borrow_mut().done(matcher.left_brace.span, bindings, matcher.body)?;
     }
-    if done.len() > 1 {
-        todo_error("multiple matchers are identical");
-    }
-    if done.len() > 0 && (simple.len() > 0 || meta.len() > 0) {
-        todo_error("matcher is prefix of other matcher");
-    }
-    if done.len() > 0 {
-        return Ok(Rc::new(crate::muncher::CompleteMuncher {
-            block: done[0].body.clone(),
-        }));
-    }
-    if simple.len() > 0 && meta.len() > 0 {
-        todo_error("overlapping matchers");
-    }
-    if simple.len() > 0 {
-        simple.sort_by(|a, b| a.0.source.cmp(&b.0.source));
-        let mut group = Vec::<(Token, Matcher)>::new();
-        let mut cases = HashMap::new();
-        while let Some((tok, matcher)) = simple.pop() {
-            if group.len() > 0 && tok.source != group[0].0.source {
-                let source = group[0].0.source.clone();
-                let group = compile_object_muncher(
-                    group.drain(..).map(|(_, m)| m).collect(),
-                    idx + 1,
-                )?;
-                cases.insert(source, group);
-            }
-            group.push((tok, matcher));
-        }
-        if group.len() > 0 {
-            let source = group[0].0.source.clone();
-            let group = compile_object_muncher(
-                group.drain(..).map(|(_, m)| m).collect(),
-                idx + 1,
-            )?;
-            cases.insert(source, group);
-        }
-        return Ok(Rc::new(crate::muncher::PlainMuncher { cases }));
-    }
-    if meta.iter().any(|(kind, _, _)| kind.source != meta[0].0.source) {
-        todo_error("meta matchers branch out");
-    }
-    let kind = &*meta[0].0.source;
-    let make_muncher: fn(_, _) -> Rc<dyn Muncher> = match kind {
-        "expr" => |bind, cont| Rc::new(crate::muncher::ExprMuncher { bind, cont }),
-        "block" => |bind, cont| Rc::new(crate::muncher::BlockMuncher { bind, cont }),
-        "ident" => |bind, cont| Rc::new(crate::muncher::IdentMuncher { bind, cont }),
-        _ => return Err(Error {
-            msg: format!("invalid muncher type"),
-            span: meta[0].0.span,
-            notes: Vec::new(),
-        }),
-    };
-    let bind = meta[0].1.clone();
-    let cont = compile_object_muncher(meta.into_iter().map(|t| t.2).collect(), idx + 1)?;
-    Ok(make_muncher(bind, cont))
+    Ok(Rc::new(crate::munch_trie::TrieMuncher {
+        trie,
+        values: Vec::new(),
+    }))
 }
 
 #[derive(Clone)]
@@ -521,11 +481,20 @@ enum Pattern {
 
 struct Matcher {
     pattern: Vec<Pattern>,
+    left_brace: Token,
     body: Rc<Block>,
 }
 
 fn can_start_call(token: &Token) -> bool {
     token.is_dot() || token.is_left_paren()
+}
+
+pub(crate) fn can_start_expr(token: &Token) -> bool {
+    token.is_ident()
+    || token.kind == TokenKind::This
+    || token.kind == TokenKind::String
+    || token.kind == TokenKind::Object
+    || token.is_left_paren()
 }
 
 fn eat_token(tokens: &[Token], check: impl FnOnce(&Token) -> bool) -> Option<(Token, &[Token])> {

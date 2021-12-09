@@ -55,116 +55,6 @@ impl Muncher for NoMuncher {
     }
 }
 
-pub(crate) struct CompleteMuncher {
-    pub(crate) block: Rc<Block>,
-}
-
-impl Muncher for CompleteMuncher {
-    fn munch_inner(
-        &self,
-        tokens: &mut Tokens,
-        env: &Env,
-        caller: &mut Interpreter,
-    ) -> Result<MunchOutput, MunchOutput> {
-        Ok(MunchOutput::Done { block: self.block.clone() })
-    }
-}
-
-pub(crate) struct PlainMuncher {
-    pub(crate) cases: HashMap<Rc<str>, Rc<dyn Muncher>>,
-}
-
-impl Muncher for PlainMuncher {
-    fn munch_inner(
-        &self,
-        tokens: &mut Tokens,
-        env: &Env,
-        caller: &mut Interpreter,
-    ) -> Result<MunchOutput, MunchOutput> {
-        Ok(match tokens.peek() {
-            Some(tok) => {
-                if let Some(next) = self.cases.get(&tok.source).cloned() {
-                    tokens.advance();
-                    MunchOutput::Continue {
-                        muncher: next,
-                    }
-                } else {
-                    MunchOutput::Failed {
-                        error: tokens.error("unexpected token"),
-                    }
-                }
-            }
-            None => {
-                MunchOutput::Failed {
-                    error: tokens.error("expected token"),
-                }
-            }
-        })
-    }
-}
-
-pub(crate) struct ExprMuncher {
-    pub(crate) bind: Token,
-    pub(crate) cont: Rc<dyn Muncher>,
-}
-
-impl Muncher for ExprMuncher {
-    fn munch_inner(
-        &self,
-        tokens: &mut Tokens,
-        env: &Env,
-        caller: &mut Interpreter,
-    ) -> Result<MunchOutput, MunchOutput> {
-        let value = caller.expr(tokens)?.value;
-        env.define(self.bind.clone(), value).unwrap();
-        Ok(MunchOutput::Continue {
-            muncher: self.cont.clone(),
-        })
-    }
-}
-
-pub(crate) struct BlockMuncher {
-    pub(crate) bind: Token,
-    pub(crate) cont: Rc<dyn Muncher>,
-}
-
-impl Muncher for BlockMuncher {
-    fn munch_inner(
-        &self,
-        tokens: &mut Tokens,
-        env: &Env,
-        caller: &mut Interpreter,
-    ) -> Result<MunchOutput, MunchOutput> {
-        let source_block = caller.munch_source_block(tokens)?;
-        let block = Value::Block(Rc::new(Block::Source(source_block)));
-        env.define(self.bind.clone(), block).unwrap();
-        Ok(MunchOutput::Continue {
-            muncher: self.cont.clone(),
-        })
-    }
-}
-
-pub(crate) struct IdentMuncher {
-    pub(crate) bind: Token,
-    pub(crate) cont: Rc<dyn Muncher>,
-}
-
-impl Muncher for IdentMuncher {
-    fn munch_inner(
-        &self,
-        tokens: &mut Tokens,
-        env: &Env,
-        caller: &mut Interpreter,
-    ) -> Result<MunchOutput, MunchOutput> {
-        let ident = tokens.expect(Token::is_ident, "identifier")?;
-        let value = Value::Ident(ident.source);
-        env.define(self.bind.clone(), value).unwrap();
-        Ok(MunchOutput::Continue {
-            muncher: self.cont.clone(),
-        })
-    }
-}
-
 pub(crate) struct PrintMuncher;
 
 impl Muncher for PrintMuncher {
@@ -295,11 +185,11 @@ impl Muncher for BoolMuncher {
     }
 }
 
-pub(crate) struct BlockCallMuncher {
+pub(crate) struct BlockMuncher {
     pub(crate) value: Rc<Block>,
 }
 
-impl Muncher for BlockCallMuncher {
+impl Muncher for BlockMuncher {
     fn munch_inner(
         &self,
         tokens: &mut Tokens,

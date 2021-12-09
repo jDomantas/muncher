@@ -1,8 +1,10 @@
 #![allow(unused)]
+#![forbid(unused_must_use)]
 
 mod lexer;
 mod interpreter;
 mod muncher;
+mod munch_trie;
 mod pretty_errors;
 
 use std::cell::RefCell;
@@ -45,7 +47,7 @@ impl Value {
         match self {
             Value::Int(i) => Rc::new(muncher::NumMuncher { value: *i }),
             Value::Bool(b) => Rc::new(muncher::BoolMuncher { value: *b }),
-            Value::Block(b) => Rc::new(muncher::BlockCallMuncher { value: b.clone() }),
+            Value::Block(b) => Rc::new(muncher::BlockMuncher { value: b.clone() }),
             Value::Object(o) => o.muncher.clone(),
             _ => Rc::new(muncher::NoMuncher),
         }
