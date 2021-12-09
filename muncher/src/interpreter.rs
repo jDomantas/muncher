@@ -92,6 +92,7 @@ impl EnvInner {
 #[derive(Debug, Clone)]
 pub(crate) struct Env {
     inner: Rc<EnvInner>,
+    this: Option<Value>,
 }
 
 impl Env {
@@ -101,6 +102,7 @@ impl Env {
                 values: Default::default(),
                 next: None,
             }),
+            this: None,
         }
     }
 
@@ -130,6 +132,7 @@ impl Env {
                 values: Default::default(),
                 next: Some(self.inner.clone()),
             }),
+            this: self.this.clone(),
         }
     }
 
@@ -223,17 +226,38 @@ impl Interpreter {
                 self.munch_calls(spanned, tokens)
             }
         } else if let Some(this) = tokens.check(|t| t.kind == TokenKind::This) {
-            if let Some((_dot, ident, _eq)) = eat_token3(
+            let this = if let Some(value) = self.env.this.clone() {
+                SpannedValue { value, span: this.span }
+            } else {
+                return Err(Error {
+                    msg: "cannot use `self` outside methods".to_owned(),
+                    span: this.span,
+                    notes: Vec::new(),
+                });
+            };
+            if let Some((_dot, ident)) = eat_token2(
                 tokens,
                 Token::is_dot,
-                Token::is_ident,
-                Token::is_eq,
+                |t| t.is_ident() && this.value.has_field(&t.source),
             ) {
-                let value = self.expr(tokens)?;
-                todo!("assign object property")
-                // Ok((value, tail))
+                if let Some(_eq) = tokens.check(Token::is_eq) {
+                    let value = self.expr(tokens)?;
+                    this.value.on_field(&ident.source, |f| *f = value.value.clone());
+                    Ok(SpannedValue {
+                        value: value.value,
+                        span: this.span.union(value.span),
+                    })
+                } else {
+                    let mut field = None;
+                    this.value.on_field(&ident.source, |f| field = Some(f.clone()));
+                    let span = this.span.union(ident.span);
+                    Ok(SpannedValue {
+                        value: field.unwrap(),
+                        span,
+                    })
+                }
             } else {
-                todo!("resolve self and continue munching calls")
+                self.munch_calls(this, tokens)
             }
         } else if let Some(str) = tokens.check(|t| t.kind == TokenKind::String) {
             let value = Value::String(crate::lexer::unescape_string(&str.source).into());
@@ -245,11 +269,11 @@ impl Interpreter {
         } else if let Some(obj) = tokens.check(|t| t.kind == TokenKind::Object) {
             let name = tokens.expect(Token::is_ident, "identifier")?;
             tokens.expect(Token::is_left_brace, "`{`")?;
-            let matchers = self.munch_object_contents(tokens)?;
+            let (properties, matchers) = self.munch_object_contents(tokens)?;
             let muncher = compile_object_muncher(matchers, 0)?;
             let object = Value::Object(Rc::new(Object {
                 name: name.source,
-                properties: Default::default(),
+                properties: RefCell::new(properties),
                 muncher,
             }));
             let spanned = SpannedValue {
@@ -304,6 +328,7 @@ impl Interpreter {
                     Block::Intrinsic(_) => None,
                 },
             }),
+            this: Some(value.value.clone()),
         };
         let returned_value = self.block_with_env(&block, env)?;
         let spanned = SpannedValue {
@@ -313,8 +338,31 @@ impl Interpreter {
         self.munch_calls(spanned, tokens)
     }
 
-    fn munch_object_contents(&mut self, tokens: &mut Tokens) -> Result<Vec<Matcher>> {
+    fn munch_object_contents(&mut self, tokens: &mut Tokens) -> Result<(HashMap<Rc<str>, Value>, Vec<Matcher>)> {
         let mut matchers = Vec::new();
+        let mut properties = HashMap::new();
+        let mut property_spans = HashMap::new();
+        while tokens.check(|t| t.kind == TokenKind::This).is_some() {
+            tokens.expect(Token::is_dot, "`.`")?;
+            let name = tokens.expect(Token::is_ident, "identifier")?;
+            tokens.expect(Token::is_eq, "`=`")?;
+            let value = self.expr(tokens)?.value;
+            tokens.expect(Token::is_semi, "`;`")?;
+            if let Some(span) = property_spans.get(&*name.source).copied() {
+                return Err(Error {
+                    msg: format!("property {} defined twice", name.source),
+                    span: name.span,
+                    notes: Vec::from([
+                        Note {
+                            msg: "previously defined here".to_owned(),
+                            span,
+                        }
+                    ])
+                })
+            }
+            property_spans.insert(name.source.clone(), name.span);
+            properties.insert(name.source, value);
+        }
         while !tokens.at(Token::is_right_brace) {
             let mut pattern = Vec::new();
             if !can_start_call(&tokens.peek().unwrap()) {
@@ -339,7 +387,7 @@ impl Interpreter {
             matchers.push(Matcher { pattern, left_brace, body });
         }
         tokens.advance();
-        Ok(matchers)
+        Ok((properties, matchers))
     }
 
     fn munch_source_block_inner(&mut self, tokens: &mut Tokens) -> SourceBlock {
@@ -509,6 +557,26 @@ pub(crate) fn can_start_expr(token: &Token) -> bool {
     || token.kind == TokenKind::String
     || token.kind == TokenKind::Object
     || token.is_left_paren()
+}
+
+fn eat_token2(
+    tokens: &mut Tokens,
+    check1: impl FnOnce(&Token) -> bool,
+    check2: impl FnOnce(&Token) -> bool,
+) -> Option<(Token, Token)> {
+    match tokens.nth(0) {
+        Some(t) if !check1(t) => return None,
+        None => return None,
+        _ => {}
+    }
+    match tokens.nth(1) {
+        Some(t) if !check2(t) => return None,
+        None => return None,
+        _ => {}
+    }
+    let t1 = tokens.advance();
+    let t2 = tokens.advance();
+    Some((t1, t2))
 }
 
 fn eat_token3(

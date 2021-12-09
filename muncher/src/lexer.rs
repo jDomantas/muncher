@@ -89,7 +89,7 @@ impl fmt::Display for Token {
             TokenKind::String => write!(f, "string"),
             TokenKind::Symbol => write!(f, "`{}`", self.source),
             TokenKind::Object => write!(f, "`object`"),
-            TokenKind::This => write!(f, "`this`"),
+            TokenKind::This => write!(f, "`self`"),
             TokenKind::Return => write!(f, "`return`"),
             TokenKind::Let => write!(f, "`let`"),
             TokenKind::Whitespace => write!(f, "whitespace"),

@@ -52,6 +52,20 @@ impl Value {
             _ => Rc::new(muncher::NoMuncher),
         }
     }
+
+    fn on_field(&self, field: &str, f: impl FnOnce(&mut Value)) {
+        if let Value::Object(o) = self {
+            if let Some(prop) = o.properties.borrow_mut().get_mut(field) {
+                f(prop);
+            }
+        }
+    }
+
+    fn has_field(&self, field: &str) -> bool {
+        let mut has = false;
+        self.on_field(field, |_| has = true);
+        has
+    }
 }
 
 impl fmt::Display for Value {
