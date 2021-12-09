@@ -192,11 +192,43 @@ impl Muncher for NumMuncher {
             Err(error) => return Err(MunchOutput::FailedEval { error }),
         };
         tokens.expect(Token::is_right_paren, "`)`").map_err(|_| MunchOutput::Failed)?;
-        // fixme: bogus span
         let result = match handler(value.value, value.span, self.value) {
             Ok(x) => x,
             Err(e) => return Err(MunchOutput::FailedEval { error: e }),
         };
+
+        Ok(MunchOutput::Done {
+            block: Rc::new(Block::Intrinsic(Intrinsic::Value(result))),
+        })
+    }
+}
+
+pub(crate) struct BoolMuncher {
+    pub(crate) value: bool,
+}
+
+impl Muncher for BoolMuncher {
+    fn munch_inner(
+        &self,
+        tokens: &mut Tokens,
+        env: &Env,
+        caller: &mut Interpreter,
+    ) -> Result<MunchOutput, MunchOutput> {
+        tokens.expect(Token::is_dot, "`.`").map_err(|_| MunchOutput::Failed)?;
+        tokens.expect(|t| &*t.source == "pick", "`pick`").map_err(|_| MunchOutput::Failed)?;
+        tokens.expect(Token::is_left_paren, "`(`").map_err(|_| MunchOutput::Failed)?;
+        let value1 = match caller.expr(tokens) {
+            Ok(x) => x.value,
+            Err(error) => return Err(MunchOutput::FailedEval { error }),
+        };
+        tokens.expect(Token::is_comma, "`,`").map_err(|_| MunchOutput::Failed)?;
+        let value2 = match caller.expr(tokens) {
+            Ok(x) => x.value,
+            Err(error) => return Err(MunchOutput::FailedEval { error }),
+        };
+        tokens.expect(Token::is_right_paren, "`)`").map_err(|_| MunchOutput::Failed)?;
+
+        let result = if self.value { value1 } else { value2 };
 
         Ok(MunchOutput::Done {
             block: Rc::new(Block::Intrinsic(Intrinsic::Value(result))),

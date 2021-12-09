@@ -41,6 +41,7 @@ impl Value {
     fn get_muncher(&self) -> Rc<dyn Muncher> {
         match self {
             Value::Int(i) => Rc::new(muncher::NumMuncher { value: *i }),
+            Value::Bool(b) => Rc::new(muncher::BoolMuncher { value: *b }),
             Value::Object(o) => o.muncher.clone(),
             _ => Rc::new(muncher::NoMuncher),
         }

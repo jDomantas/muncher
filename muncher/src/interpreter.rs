@@ -98,6 +98,8 @@ impl Env {
             Ok(value)
         } else if let Ok(num) = ident.source.parse::<i64>() {
             Ok(Value::Int(num))
+        } else if let Ok(b) = ident.source.parse::<bool>() {
+            Ok(Value::Bool(b))
         } else {
             Err(undefined_var(ident))
         }

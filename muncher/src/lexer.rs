@@ -74,6 +74,10 @@ impl Token {
     pub(crate) fn is_colon(&self) -> bool {
         &*self.source == ":"
     }
+
+    pub(crate) fn is_comma(&self) -> bool {
+        &*self.source == ","
+    }
 }
 
 impl fmt::Display for Token {
