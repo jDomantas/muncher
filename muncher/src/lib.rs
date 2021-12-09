@@ -1,4 +1,3 @@
-#![allow(unused)]
 #![forbid(unused_must_use)]
 
 mod lexer;
@@ -200,7 +199,7 @@ pub fn eval(source: &str, intrinsics: Rc<dyn Intrinsics>) -> Result<()> {
 fn basic_test() {
     struct Intr;
     impl Intrinsics for Intr {
-        fn print(&self, value: &str) {}
+        fn print(&self, _: &str) {}
     }
     eval(
         r#" print("Hello, world!"); "#,

@@ -270,7 +270,7 @@ impl Interpreter {
             let name = tokens.expect(Token::is_ident, "identifier")?;
             tokens.expect(Token::is_left_brace, "`{`")?;
             let (properties, matchers) = self.munch_object_contents(tokens)?;
-            let muncher = compile_object_muncher(matchers, 0)?;
+            let muncher = compile_object_muncher(matchers)?;
             let object = Value::Object(Rc::new(Object {
                 name: name.source,
                 properties: RefCell::new(properties),
@@ -497,7 +497,7 @@ impl Tokens {
     }
 }
 
-fn compile_object_muncher(matchers: Vec<Matcher>, idx: usize) -> Result<Rc<dyn Muncher>> {
+fn compile_object_muncher(matchers: Vec<Matcher>) -> Result<Rc<dyn Muncher>> {
     if matchers.len() == 0 {
         return Ok(Rc::new(crate::muncher::NoMuncher));
     }
@@ -577,31 +577,4 @@ fn eat_token2(
     let t1 = tokens.advance();
     let t2 = tokens.advance();
     Some((t1, t2))
-}
-
-fn eat_token3(
-    tokens: &mut Tokens,
-    check1: impl FnOnce(&Token) -> bool,
-    check2: impl FnOnce(&Token) -> bool,
-    check3: impl FnOnce(&Token) -> bool,
-) -> Option<(Token, Token, Token)> {
-    match tokens.nth(0) {
-        Some(t) if !check1(t) => return None,
-        None => return None,
-        _ => {}
-    }
-    match tokens.nth(1) {
-        Some(t) if !check2(t) => return None,
-        None => return None,
-        _ => {}
-    }
-    match tokens.nth(2) {
-        Some(t) if !check3(t) => return None,
-        None => return None,
-        _ => {}
-    }
-    let t1 = tokens.advance();
-    let t2 = tokens.advance();
-    let t3 = tokens.advance();
-    Some((t1, t2, t3))
 }
