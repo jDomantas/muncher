@@ -117,6 +117,8 @@ impl Env {
             Ok(Value::Int(num))
         } else if let Ok(b) = ident.source.parse::<bool>() {
             Ok(Value::Bool(b))
+        } else if &*ident.source == "nil" {
+            Ok(Value::Nil)
         } else {
             Err(undefined_var(ident))
         }
