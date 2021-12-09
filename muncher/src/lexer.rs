@@ -101,11 +101,12 @@ impl fmt::Display for Token {
 
 fn lex(source: &str) -> Result<Vec<Token>> {
     let mut tokens = Vec::new();
-    let mut pos = Pos { line: 1, col: 1 };
+    let mut pos = Pos { line: 1, col: 1, offset: 0 };
     for (kind, span) in TokenKind::lexer(source).spanned() {
         let source = &source[span.clone()];
         let start = pos;
         for c in source.chars() {
+            pos.offset += c.len_utf8();
             if c == '\n' {
                 pos.line += 1;
                 pos.col = 1;
@@ -119,6 +120,7 @@ fn lex(source: &str) -> Result<Vec<Token>> {
             TokenKind::Error => return Err(Error {
                 msg: "bad token".into(),
                 span,
+                notes: Vec::new(),
             }),
             _ => {
                 tokens.push(Token {

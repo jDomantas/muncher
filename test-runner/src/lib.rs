@@ -21,7 +21,7 @@ fn do_run(source: &str) -> (String, String) {
     });
     let stderr = match muncher::eval(source, intr.clone()) {
         Ok(()) => "".to_owned(),
-        Err(e) => format!("runtime error at line {}: {}", e.span.start.line, e.msg),
+        Err(e) => e.pretty("test.mnc", source),
     };
     let stdout: String = intr.stdout.borrow().clone();
     (stdout, stderr)
@@ -48,21 +48,37 @@ fn check_program_run(
         None => "".to_owned(),
     };
     let (actual_out, actual_err) = do_run(&source);
-    if actual_err != stderr {
-        panic!(
-            "program {} gave incorrect error, expected {:?}, got {:?}",
-            path.display(),
-            stderr,
-            actual_err,
-        );
-    }
-    if actual_out != stdout {
-        panic!(
-            "program {} gave incorrect output, expected {:?}, got {:?}",
-            path.display(),
-            stdout,
-            actual_out,
-        );
+
+    if cfg!(feature = "recreate") {
+        if actual_err != stderr {
+            println!("stderr of {} changed", path.display());
+            let stderr_path = add_extension(path, "stderr");
+            std::fs::write(&stderr_path, actual_err.as_bytes())
+                .expect(&format!("failed to write {}", stderr_path.display()));
+        }
+        if actual_out != stdout {
+            println!("stdout of {} changed", path.display());
+            let stdout_path = add_extension(path, "stdout");
+            std::fs::write(&stdout_path, actual_err.as_bytes())
+                .expect(&format!("failed to write {}", stdout_path.display()));
+        }
+    } else {
+        if actual_err != stderr {
+            panic!(
+                "program {} gave incorrect error, expected {:?}, got {:?}",
+                path.display(),
+                stderr,
+                actual_err,
+            );
+        }
+        if actual_out != stdout {
+            panic!(
+                "program {} gave incorrect output, expected {:?}, got {:?}",
+                path.display(),
+                stdout,
+                actual_out,
+            );
+        }
     }
 }
 

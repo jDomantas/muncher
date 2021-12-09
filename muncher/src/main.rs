@@ -33,12 +33,7 @@ fn main() {
     match muncher::eval(&source, Rc::new(Intr)) {
         Ok(()) => {}
         Err(e) => {
-            eprintln!(
-                "runtime error (at {}:{}): {}",
-                e.span.start.line,
-                e.span.start.col,
-                e.msg,
-            );
+            e.to_stderr(file, &source);
         }
     }
 }

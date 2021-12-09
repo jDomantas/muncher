@@ -11,8 +11,14 @@ pub(crate) enum MunchOutput {
     Continue {
         muncher: Rc<dyn Muncher>,
     },
-    Failed,
+    Failed { error: Error },
     FailedEval { error: Error },
+}
+
+impl MunchOutput {
+    fn failed(error: Error) -> MunchOutput {
+        MunchOutput::Failed { error }
+    }
 }
 
 impl From<Error> for MunchOutput {
@@ -43,7 +49,9 @@ impl Muncher for NoMuncher {
         env: &Env,
         caller: &mut Interpreter,
     ) -> Result<MunchOutput, MunchOutput> {
-        Ok(MunchOutput::Failed)
+        Ok(MunchOutput::Failed {
+            error: tokens.error("no methods are defined"),
+        })
     }
 }
 
@@ -81,11 +89,15 @@ impl Muncher for PlainMuncher {
                         muncher: next,
                     }
                 } else {
-                    MunchOutput::Failed
+                    MunchOutput::Failed {
+                        error: tokens.error("unexpected token"),
+                    }
                 }
             }
             None => {
-                MunchOutput::Failed
+                MunchOutput::Failed {
+                    error: tokens.error("expected token"),
+                }
             }
         })
     }
@@ -162,9 +174,9 @@ impl Muncher for PrintMuncher {
         env: &Env,
         caller: &mut Interpreter,
     ) -> Result<MunchOutput, MunchOutput> {
-        tokens.expect(Token::is_left_paren, "`(`").map_err(|_| MunchOutput::Failed)?;
+        tokens.expect(Token::is_left_paren, "`(`").map_err(MunchOutput::failed)?;
         let value = caller.expr(tokens)?.value;
-        tokens.expect(Token::is_right_paren, "`)`").map_err(|_| MunchOutput::Failed)?;
+        tokens.expect(Token::is_right_paren, "`)`").map_err(MunchOutput::failed)?;
         Ok(MunchOutput::Done {
             block: Rc::new(Block::Intrinsic(Intrinsic::Print(value.to_string()))),
         })
@@ -182,7 +194,7 @@ impl Muncher for NumMuncher {
         env: &Env,
         caller: &mut Interpreter,
     ) -> Result<MunchOutput, MunchOutput> {
-        tokens.expect(Token::is_dot, "`.`").map_err(|_| MunchOutput::Failed)?;
+        tokens.expect(Token::is_dot, "`.`").map_err(MunchOutput::failed)?;
 
         fn cast_int(value: Value, span: Span) -> Result<i64, Error> {
             if let Value::Int(i) = value {
@@ -191,6 +203,7 @@ impl Muncher for NumMuncher {
                 Err(Error {
                     msg: format!("expected int, got {}", value),
                     span,
+                    notes: Vec::new(),
                 })
             }
         }
@@ -207,6 +220,7 @@ impl Muncher for NumMuncher {
                 Err(Error {
                     msg: "divisor is zero".to_owned(),
                     span: s,
+                    notes: Vec::new(),
                 })
             } else {
                 Ok(n.wrapping_div(i).into())
@@ -215,6 +229,7 @@ impl Muncher for NumMuncher {
                 Err(Error {
                     msg: "divisor is zero".to_owned(),
                     span: s,
+                    notes: Vec::new(),
                 })
             } else {
                 Ok(n.wrapping_rem(i).into())
@@ -225,15 +240,17 @@ impl Muncher for NumMuncher {
             Some("ne") => |v, s, n| cast_int(v, s).map(|i| (n != i).into()),
             Some("gt") => |v, s, n| cast_int(v, s).map(|i| (n > i).into()),
             Some("ge") => |v, s, n| cast_int(v, s).map(|i| (n >= i).into()),
-            _ => return Err(MunchOutput::Failed),
+            _ => return Err(MunchOutput::Failed {
+                error: tokens.error("expected numeric method"),
+            }),
         };
         tokens.advance();
-        tokens.expect(Token::is_left_paren, "`(`").map_err(|_| MunchOutput::Failed)?;
+        tokens.expect(Token::is_left_paren, "`(`").map_err(MunchOutput::failed)?;
         let value = match caller.expr(tokens) {
             Ok(x) => x,
             Err(error) => return Err(MunchOutput::FailedEval { error }),
         };
-        tokens.expect(Token::is_right_paren, "`)`").map_err(|_| MunchOutput::Failed)?;
+        tokens.expect(Token::is_right_paren, "`)`").map_err(MunchOutput::failed)?;
         let result = match handler(value.value, value.span, self.value) {
             Ok(x) => x,
             Err(e) => return Err(MunchOutput::FailedEval { error: e }),
@@ -256,19 +273,19 @@ impl Muncher for BoolMuncher {
         env: &Env,
         caller: &mut Interpreter,
     ) -> Result<MunchOutput, MunchOutput> {
-        tokens.expect(Token::is_dot, "`.`").map_err(|_| MunchOutput::Failed)?;
-        tokens.expect(|t| &*t.source == "pick", "`pick`").map_err(|_| MunchOutput::Failed)?;
-        tokens.expect(Token::is_left_paren, "`(`").map_err(|_| MunchOutput::Failed)?;
+        tokens.expect(Token::is_dot, "`.`").map_err(MunchOutput::failed)?;
+        tokens.expect(|t| &*t.source == "pick", "`pick`").map_err(MunchOutput::failed)?;
+        tokens.expect(Token::is_left_paren, "`(`").map_err(MunchOutput::failed)?;
         let value1 = match caller.expr(tokens) {
             Ok(x) => x.value,
             Err(error) => return Err(MunchOutput::FailedEval { error }),
         };
-        tokens.expect(Token::is_comma, "`,`").map_err(|_| MunchOutput::Failed)?;
+        tokens.expect(Token::is_comma, "`,`").map_err(MunchOutput::failed)?;
         let value2 = match caller.expr(tokens) {
             Ok(x) => x.value,
             Err(error) => return Err(MunchOutput::FailedEval { error }),
         };
-        tokens.expect(Token::is_right_paren, "`)`").map_err(|_| MunchOutput::Failed)?;
+        tokens.expect(Token::is_right_paren, "`)`").map_err(MunchOutput::failed)?;
 
         let result = if self.value { value1 } else { value2 };
 
@@ -289,7 +306,7 @@ impl Muncher for BlockCallMuncher {
         env: &Env,
         caller: &mut Interpreter,
     ) -> Result<MunchOutput, MunchOutput> {
-        tokens.expect(Token::is_dot, "`.`").map_err(|_| MunchOutput::Failed)?;
+        tokens.expect(Token::is_dot, "`.`").map_err(MunchOutput::failed)?;
         match tokens
             .peek()
             .filter(|t| t.kind == TokenKind::Ident)
@@ -314,6 +331,7 @@ impl Muncher for BlockCallMuncher {
                         error: Error {
                             msg: format!("expected identifier, got {}", value),
                             span,
+                            notes: Vec::new(),
                         },
                     }),
                 };
@@ -335,7 +353,9 @@ impl Muncher for BlockCallMuncher {
                     block: Rc::new(Block::Intrinsic(Intrinsic::Value(Value::Block(block)))),
                 })
             }
-            _ => return Err(MunchOutput::Failed),
+            _ => return Err(MunchOutput::Failed {
+                error: tokens.error("expected block method"),
+            }),
         }
     }
 }

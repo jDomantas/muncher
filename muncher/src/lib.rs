@@ -3,11 +3,14 @@
 mod lexer;
 mod interpreter;
 mod muncher;
+mod pretty_errors;
 
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::fmt;
 use std::rc::Rc;
+use codespan_reporting::term::termcolor::{NoColor, StandardStream, ColorChoice};
+
 use crate::interpreter::{Env, Interpreter};
 use crate::lexer::Token;
 use crate::muncher::Muncher;
@@ -108,6 +111,25 @@ impl fmt::Debug for Object {
 pub struct Error {
     pub msg: String,
     pub span: Span,
+    pub notes: Vec<Note>,
+}
+
+impl Error {
+    pub fn pretty(&self, source_name: &str, source: &str) -> String {
+        let mut result = Vec::new();
+        pretty_errors::emit(self, source_name, source, &mut NoColor::new(&mut result));
+        String::from_utf8(result).unwrap()
+    }
+
+    pub fn to_stderr(&self, source_name: &str, source: &str) {
+        pretty_errors::emit(self, source_name, source, &mut StandardStream::stderr(ColorChoice::Auto));
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct Note {
+    pub msg: String,
+    pub span: Span,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -129,6 +151,7 @@ impl Span {
 pub struct Pos {
     pub line: u32,
     pub col: u32,
+    pub(crate) offset: usize,
 }
 
 pub trait Intrinsics {

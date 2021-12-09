@@ -1,7 +1,7 @@
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
-use crate::{Value, Block, Intrinsic, SourceBlock, Result, Error, Intrinsics, Object, Span, Pos};
+use crate::{Value, Block, Intrinsic, SourceBlock, Result, Error, Intrinsics, Object, Span, Pos, Note};
 use crate::lexer::{Token, TokenKind};
 use crate::muncher::{MunchOutput, Muncher};
 
@@ -27,6 +27,7 @@ fn double_def(token: Token) -> Error {
     Error {
         msg: format!("variable `{}` is already defined in this scope", token.source),
         span: token.span,
+        notes: Vec::new(),
     }
 }
 
@@ -34,6 +35,7 @@ fn undefined_var(token: Token) -> Error {
     Error {
         msg: format!("variable `{}` is not defined", token.source),
         span: token.span,
+        notes: Vec::new(),
     }
 }
 
@@ -259,6 +261,7 @@ impl Interpreter {
             None => return Ok(value),
             _ => {}
         }
+        let start = tokens.peek().unwrap().span;
         let mut muncher = value.value.get_muncher();
         let env = Env::new();
         let block = loop {
@@ -269,8 +272,12 @@ impl Interpreter {
                 MunchOutput::Continue { muncher: next } => {
                     muncher = next;
                 }
-                MunchOutput::Failed => {
-                    todo_error("failed call");
+                MunchOutput::Failed { mut error } => {
+                    error.notes.push(Note {
+                        msg: format!("call to {} started here", value.value),
+                        span: start,
+                    });
+                    return Err(error);
                 }
                 MunchOutput::FailedEval { error } => return Err(error),
             }
@@ -412,12 +419,14 @@ impl Tokens {
                     end: Pos {
                         line: t.span.end.line,
                         col: t.span.end.col + 1,
+                        offset: t.span.end.offset + 1,
                     }
                 }))
             .unwrap();
         Error {
             msg: msg.to_owned(),
             span,
+            notes: Vec::new(),
         }
     }
 
@@ -496,6 +505,7 @@ fn compile_object_muncher(matchers: Vec<Matcher>, idx: usize) -> Result<Rc<dyn M
         _ => return Err(Error {
             msg: format!("invalid muncher type"),
             span: meta[0].0.span,
+            notes: Vec::new(),
         }),
     };
     let bind = meta[0].1.clone();
