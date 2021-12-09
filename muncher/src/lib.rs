@@ -48,6 +48,7 @@ impl Value {
             Value::Bool(b) => Rc::new(muncher::BoolMuncher { value: *b }),
             Value::Block(b) => Rc::new(muncher::BlockMuncher { value: b.clone() }),
             Value::Object(o) => o.muncher.clone(),
+            Value::String(s) => Rc::new(muncher::StringMuncher { value: s.clone() }),
             _ => Rc::new(muncher::NoMuncher),
         }
     }
@@ -64,6 +65,21 @@ impl Value {
         let mut has = false;
         self.on_field(field, |_| has = true);
         has
+    }
+
+    fn type_name(&self) -> String {
+        match self {
+            Value::Nil => "<Nil>".to_owned(),
+            Value::Int(_) => "<Int>".to_owned(),
+            Value::Bool(_) => "<Bool>".to_owned(),
+            Value::String(_) => "<String>".to_owned(),
+            Value::Ident(_) => "<Ident>".to_owned(),
+            Value::Block(_) => "<Block>".to_owned(),
+            Value::Object(o) => match &o.name {
+                Some(name) => format!("<Object {}>", name),
+                None => "<Object>".to_owned(),
+            },
+        }
     }
 }
 

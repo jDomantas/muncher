@@ -314,7 +314,7 @@ impl Interpreter {
                 }
                 MunchOutput::Failed { mut error } => {
                     error.notes.push(Note {
-                        msg: format!("call to {} started here", value.value),
+                        msg: format!("call to {} started here", value.value.type_name()),
                         span: start,
                     });
                     return Err(error);

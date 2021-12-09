@@ -90,7 +90,7 @@ impl Muncher for NumMuncher {
                 Ok(i)
             } else {
                 Err(Error {
-                    msg: format!("expected int, got {}", value),
+                    msg: format!("expected int, got {}", value.type_name()),
                     span,
                     notes: Vec::new(),
                 })
@@ -218,7 +218,7 @@ impl Muncher for BlockMuncher {
                     SpannedValue { value: Value::Ident(i), .. } => i,
                     SpannedValue { span, value } => return Err(MunchOutput::FailedEval {
                         error: Error {
-                            msg: format!("expected identifier, got {}", value),
+                            msg: format!("expected <Ident>, got {}", value.type_name()),
                             span,
                             notes: Vec::new(),
                         },
@@ -245,6 +245,94 @@ impl Muncher for BlockMuncher {
             _ => return Err(MunchOutput::Failed {
                 error: tokens.error("expected block method"),
             }),
+        }
+    }
+}
+
+pub(crate) struct StringMuncher {
+    pub(crate) value: Rc<str>,
+}
+
+impl Muncher for StringMuncher {
+    fn munch_inner(
+        &self,
+        tokens: &mut Tokens,
+        _env: &Env,
+        caller: &mut Interpreter,
+    ) -> Result<MunchOutput, MunchOutput> {
+        tokens.expect(Token::is_dot, "`.`").map_err(MunchOutput::failed)?;
+
+        fn cast_int(value: Value, span: Span) -> Result<i64, Error> {
+            if let Value::Int(i) = value {
+                Ok(i)
+            } else {
+                Err(Error {
+                    msg: format!("expected int, got {}", value.type_name()),
+                    span,
+                    notes: Vec::new(),
+                })
+            }
+        }
+
+        if tokens.check(|t| &*t.source == "eq").is_some() {
+            tokens.expect(Token::is_left_paren, "`(`")?;
+            let arg = caller.expr(tokens)?;
+            let result = if let Value::String(s) = &arg.value {
+                self.value == *s
+            } else {
+                return Err(MunchOutput::Failed {
+                    error: Error {
+                        msg: format!("expected string, got {}", arg.value.type_name()),
+                        span: arg.span,
+                        notes: Vec::new(),
+                    },
+                });
+            };
+            tokens.expect(Token::is_right_paren, "`)`")?;
+            Ok(MunchOutput::Done {
+                block: Rc::new(Block::Intrinsic(Intrinsic::Value(Value::Bool(result))))
+            })
+        } else if tokens.check(|t| &*t.source == "len").is_some() {
+            Ok(MunchOutput::Done {
+                block: Rc::new(Block::Intrinsic(Intrinsic::Value(Value::Int(self.value.chars().count() as i64))))
+            })
+        } else if tokens.check(|t| &*t.source == "substr").is_some() {
+            tokens.expect(Token::is_left_paren, "`(`")?;
+            let arg = caller.expr(tokens)?;
+            let start = cast_int(arg.value, arg.span)?;
+            tokens.expect(Token::is_comma, "`,`")?;
+            let arg = caller.expr(tokens)?;
+            let end = cast_int(arg.value, arg.span)?;
+            tokens.expect(Token::is_right_paren, "`)`")?;
+            let start = start.clamp(0, self.value.len() as i64) as usize;
+            let end = end.clamp(0, self.value.len() as i64) as usize;
+            let take = if end < start { 0 } else { end - start };
+            let result = self.value.chars().skip(start).take(take).collect::<String>().into();
+            Ok(MunchOutput::Done {
+                block: Rc::new(Block::Intrinsic(Intrinsic::Value(Value::String(result))))
+            })
+        } else if tokens.check(|t| &*t.source == "concat").is_some() {
+            tokens.expect(Token::is_left_paren, "`(`")?;
+            let arg = caller.expr(tokens)?;
+            let result = if let Value::String(s) = &arg.value {
+                format!("{}{}", self.value, s).into()
+            } else {
+                return Err(MunchOutput::Failed {
+                    error: Error {
+                        msg: format!("expected string, got {}", arg.value.type_name()),
+                        span: arg.span,
+                        notes: Vec::new(),
+                    },
+                });
+            };
+            tokens.expect(Token::is_right_paren, "`)`")?;
+            Ok(MunchOutput::Done {
+                block: Rc::new(Block::Intrinsic(Intrinsic::Value(Value::String(result))))
+            })
+        } else {
+            Err(MunchOutput::Failed {
+                error: tokens.error("expected string method"),
+            })
         }
     }
 }
