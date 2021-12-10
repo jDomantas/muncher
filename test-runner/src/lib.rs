@@ -111,7 +111,10 @@ fn convert_literate(path: &Path) -> String {
             comrak::nodes::NodeValue::CodeBlock(
                 comrak::nodes::NodeCodeBlock { literal, .. },
             ) => {
-                program.extend_from_slice(literal);
+                if program.len() > 0 {
+                    program.push(b'\n');
+                }
+                program.extend(literal.iter().copied().filter(|&b| b != b'\r'));
             }
             _ => (),
         }
@@ -132,10 +135,10 @@ fn get_outputs(source: &str) -> String {
     output
 }
 
-fn read_optional(path: &Path) -> String {
+fn read_optional(path: &Path) -> Option<String> {
     match std::fs::read_to_string(path) {
-        Ok(s) => s,
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => String::new(),
+        Ok(s) => Some(s),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => None,
         Err(_) => panic!("failed to read {:?}", path),
     }
 }
@@ -147,7 +150,7 @@ fn literate(dir: &Path) {
     let output_file = add_extension(&program_file, "stdout");
     let actual_source = read_optional(&program_file);
     let actual_output = read_optional(&output_file);
-    if source != actual_source {
+    if Some(source.as_str()) != actual_source.as_deref() {
         if cfg!(feature = "recreate") {
             std::fs::write(&program_file, source.as_bytes())
                 .expect(&format!("failed to write {:?}", program_file))
@@ -155,7 +158,7 @@ fn literate(dir: &Path) {
             panic!("program is not up to date in {}", dir.display());
         }
     }
-    if outputs != actual_output {
+    if Some(outputs.as_str()) != actual_output.as_deref() {
         if cfg!(feature = "recreate") {
             std::fs::write(&output_file, outputs.as_bytes())
                 .expect(&format!("failed to write {:?}", output_file))
@@ -218,4 +221,9 @@ fn test_cases() {
 #[test]
 fn intro() {
     literate(Path::new("../programs/examples/intro"));
+}
+
+#[test]
+fn array() {
+    literate(Path::new("../programs/examples/array"));
 }
