@@ -1,0 +1,174 @@
+let println = object {
+    () { print("\n"); }
+    ($a:expr) { print(a); self(); }
+    ($a:expr, $b:expr) { print(a); self(b); }
+    ($a:expr, $b:expr, $c:expr) { print(a); self(b, c); }
+    ($a:expr, $b:expr, $c:expr, $d:expr) { print(a); self(b, c, d); }
+};
+
+let emptyBlock = object Wtf { . $b:block { return b } } . {};
+
+let if = object If {
+    ($cond:expr) $then:block {
+        cond.pick(then, emptyBlock).exec;
+    }
+    ($cond:expr) $then:block else $else:block {
+        cond.pick(then, else).exec;
+    }
+    ($cond:expr) $then:block else if ($cond2:expr) $then2:block else $else:block {
+        if (cond) {
+            then.exec;
+        } else {
+            cond2.pick(then2, else).exec;
+        }
+    }
+};
+
+let lambda = object LambdaFactory {
+    ($param:ident) $body:block {
+        return object Lambda {
+            ($arg:expr) {
+                return body.def(param, arg).exec;
+            }
+        }
+    }
+    ($param1:ident, $param2:ident) $body:block {
+        return object Lambda {
+            ($arg1:expr, $arg2:expr) {
+                return body.def(param1, arg1).def(param2, arg2).exec;
+            }
+        }
+    }
+};
+
+let arrayNode = lambda(len) {
+    let node = nil;
+    if (len.eq(1)) {
+        node = object {
+            self.value = nil;
+            .get($idx:expr) {
+                let result = nil;
+                if (idx.eq(0)) {
+                    result = self.value;
+                }
+                return result;
+            }
+            .set($idx:expr, $value:expr) {
+                if (idx.eq(0)) {
+                    self.value = value;
+                }
+            }
+        };
+    } else if (len.mod(2).eq(1)) {
+        let middle = len.div(2);
+        node = object {
+            self.value = nil;
+            self.left = arrayNode(middle);
+            self.right = arrayNode(middle);
+            .get($idx:expr) {
+                let result = nil;
+                if (idx.eq(middle)) {
+                    result = self.value;
+                } else if (idx.lt(middle)) {
+                    result = self.left.get(idx);
+                } else {
+                    result = self.right.get(idx.sub(middle).sub(1));
+                }
+                return result;
+            }
+            .set($idx:expr, $value:expr) {
+                if (idx.eq(middle)) {
+                    self.value = value;
+                } else if (idx.lt(middle)) {
+                    self.left.set(idx, value);
+                } else {
+                    self.right.set(idx.sub(middle).sub(1), value);
+                }
+            }
+        };
+    } else {
+        let middle = len.div(2);
+        node = object {
+            self.left = arrayNode(middle);
+            self.right = arrayNode(middle);
+            .get($idx:expr) {
+                let result = nil;
+                if (idx.lt(middle)) {
+                    result = self.left.get(idx);
+                } else {
+                    result = self.right.get(idx.sub(middle));
+                }
+                return result;
+            }
+            .set($idx:expr, $value:expr) {
+                if (idx.lt(middle)) {
+                    self.left.set(idx, value);
+                } else {
+                    self.right.set(idx.sub(middle), value);
+                }
+            }
+        };
+    }
+    return node;
+};
+
+let array = object ArrayFactory {
+    ($len:expr) {
+        let array = nil;
+        if (len.eq(0)) {
+            array = object Array {
+                .len { return 0; }
+                .get($idx:expr) { return nil; }
+                .set($idx:expr, $value:expr) {}
+            };
+        } else {
+            let node = arrayNode(len);
+            array = object Array {
+                .len { return len; }
+                .get($idx:expr) { return node.get(idx); }
+                .set($idx:expr, $value:expr) { node.set(idx, value); }
+            };
+        }
+        return array;
+    }
+};
+
+let range = lambda(start, end) {
+    let len = end.sub(start);
+    let arr = array(len);
+    for (x from 0 to len) {
+        arr.set(x, start.add(x));
+    }
+    return arr;
+}
+
+let for = object For {
+    ($binding:ident from $start:expr to $end:expr) $body:block {
+        let iterate = object {
+            ($iter:expr) {
+                if (iter.lt(end)) {
+                    body.def(binding, iter).exec;
+                    self(iter.add(1));
+                }
+            }
+        };
+        iterate(start);
+    }
+    ($binding:ident in $array:expr) $body:block {
+        let len = array.len;
+        let iterate = object {
+            ($idx:expr) {
+                if (idx.lt(len)) {
+                    let item = array.get(idx);
+                    body.def(binding, item).exec;
+                    self(idx.add(1));
+                }
+            }
+        };
+        iterate(0);
+    }
+};
+
+for (item in range(20, 45)) {
+    println(item);
+}

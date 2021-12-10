@@ -1,0 +1,346 @@
+let println = object {
+    () { print("\n"); }
+    ($a:expr) { print(a); self(); }
+    ($a:expr, $b:expr) { print(a); self(b); }
+    ($a:expr, $b:expr, $c:expr) { print(a); self(b, c); }
+    ($a:expr, $b:expr, $c:expr, $d:expr) { print(a); self(b, c, d); }
+};
+
+let emptyBlock = object Wtf { . $b:block { return b } } . {};
+
+let if = object If {
+    ($cond:expr) $then:block {
+        cond.pick(then, emptyBlock).exec;
+    }
+    ($cond:expr) $then:block else $else:block {
+        cond.pick(then, else).exec;
+    }
+    ($cond:expr) $then:block else if ($cond2:expr) $then2:block else $else:block {
+        if (cond) {
+            then.exec;
+        } else {
+            cond2.pick(then2, else).exec;
+        }
+    }
+};
+
+let not = object Not {
+    ($a:expr) {
+        return a.pick(false, true);
+    }
+};
+
+let and = object And {
+    ($a:expr, $b:expr) {
+        return a.pick(b, false);
+    }
+    ($a:expr, $b:expr, $c:expr) {
+        return a.pick(self(b, c), false);
+    }
+    ($a:expr, $b:expr, $c:expr, $d:expr) {
+        return a.pick(self(b, c, d), false);
+    }
+    ($a:expr, $b:expr, $c:expr, $d:expr, $e:expr) {
+        return a.pick(self(b, c, d, e), false);
+    }
+};
+
+let lambda = object LambdaFactory {
+    ($param:ident) $body:block {
+        return object Lambda {
+            ($arg:expr) {
+                return body.def(param, arg).exec;
+            }
+        }
+    }
+    ($param1:ident, $param2:ident) $body:block {
+        return object Lambda {
+            ($arg1:expr, $arg2:expr) {
+                return body.def(param1, arg1).def(param2, arg2).exec;
+            }
+        }
+    }
+};
+
+let arrayNode = lambda(len) {
+    let node = nil;
+    if (len.eq(1)) {
+        node = object {
+            self.value = nil;
+            .get($idx:expr) {
+                let result = nil;
+                if (idx.eq(0)) {
+                    result = self.value;
+                }
+                return result;
+            }
+            .set($idx:expr, $value:expr) {
+                if (idx.eq(0)) {
+                    self.value = value;
+                }
+            }
+        };
+    } else if (len.mod(2).eq(1)) {
+        let middle = len.div(2);
+        node = object {
+            self.value = nil;
+            self.left = arrayNode(middle);
+            self.right = arrayNode(middle);
+            .get($idx:expr) {
+                let result = nil;
+                if (idx.eq(middle)) {
+                    result = self.value;
+                } else if (idx.lt(middle)) {
+                    result = self.left.get(idx);
+                } else {
+                    result = self.right.get(idx.sub(middle).sub(1));
+                }
+                return result;
+            }
+            .set($idx:expr, $value:expr) {
+                if (idx.eq(middle)) {
+                    self.value = value;
+                } else if (idx.lt(middle)) {
+                    self.left.set(idx, value);
+                } else {
+                    self.right.set(idx.sub(middle).sub(1), value);
+                }
+            }
+        };
+    } else {
+        let middle = len.div(2);
+        node = object {
+            self.left = arrayNode(middle);
+            self.right = arrayNode(middle);
+            .get($idx:expr) {
+                let result = nil;
+                if (idx.lt(middle)) {
+                    result = self.left.get(idx);
+                } else {
+                    result = self.right.get(idx.sub(middle));
+                }
+                return result;
+            }
+            .set($idx:expr, $value:expr) {
+                if (idx.lt(middle)) {
+                    self.left.set(idx, value);
+                } else {
+                    self.right.set(idx.sub(middle), value);
+                }
+            }
+        };
+    }
+    return node;
+};
+
+let array = object ArrayFactory {
+    ($len:expr) {
+        let array = nil;
+        if (len.eq(0)) {
+            array = object Array {
+                .len { return 0; }
+                .get($idx:expr) { return nil; }
+                .set($idx:expr, $value:expr) {}
+            };
+        } else {
+            let node = arrayNode(len);
+            array = object Array {
+                .len { return len; }
+                .get($idx:expr) { return node.get(idx); }
+                .set($idx:expr, $value:expr) { node.set(idx, value); }
+            };
+        }
+        return array;        
+    }
+};
+
+let range = lambda(start, end) {
+    let len = end.sub(start);
+    let arr = array(len);
+    for (x from 0 to len) {
+        arr.set(x, start.add(x));
+    }
+    return arr;
+}
+
+let for = object For {
+    ($binding:ident from $start:expr to $end:expr) $body:block {
+        let iterate = object {
+            ($iter:expr) {
+                if (iter.lt(end)) {
+                    body.def(binding, iter).exec;
+                    self(iter.add(1));
+                }
+            }
+        };
+        iterate(start);
+    }
+    ($binding:ident in $array:expr) $body:block {
+        let len = array.len;
+        let iterate = object {
+            ($idx:expr) {
+                if (idx.lt(len)) {
+                    let item = array.get(idx);
+                    body.def(binding, item).exec;
+                    self(idx.add(1));
+                }
+            }
+        };
+        iterate(0);
+    }
+};
+
+let list = object ListFactory {
+    () {
+        return object List {
+            self.len = 0;
+            self.array = array(1);
+            .len { return self.len; }
+            .get($idx:expr) {
+                let result = nil;
+                if (idx.lt(self.len)) {
+                    result = self.array.get(idx);
+                }
+                return result;
+            }
+            .set($idx:expr, $value:expr) {
+                if (idx.lt(self.len)) {
+                    self.array.set(idx, value);
+                }
+            }
+            .add($value:expr) {
+                if (self.len.eq(self.array.len)) {
+                    let newArray = array(self.array.len.mul(2));
+                    for (i from 0 to self.len) {
+                        newArray.set(i, self.array.get(i));
+                    }
+                    self.array = newArray;
+                }
+                self.array.set(self.len, value);
+                self.len = self.len.add(1);
+            }
+        }
+    }
+};
+
+let split = lambda(str, sep) {
+    let result = list();
+    let start = 0;
+    for (i from 0 to str.len) {
+        if (str.substr(i, i.add(1)).eq(sep)) {
+            result.add(str.substr(start, i));
+            start = i.add(1);
+        }
+    }
+    result.add(str.substr(start, str.len));
+    return result;
+};
+
+let parseDigit = lambda(x) {
+    let value = nil;
+    if (x.eq("0")) { value = 0; }
+    if (x.eq("1")) { value = 1; }
+    if (x.eq("2")) { value = 2; }
+    if (x.eq("3")) { value = 3; }
+    if (x.eq("4")) { value = 4; }
+    if (x.eq("5")) { value = 5; }
+    if (x.eq("6")) { value = 6; }
+    if (x.eq("7")) { value = 7; }
+    if (x.eq("8")) { value = 8; }
+    if (x.eq("9")) { value = 9; }
+    return value;
+};
+
+let parseRow = lambda(row) {
+    let result = list();
+    for (i from 0 to row.len) {
+        result.add(parseDigit(row.substr(i, i.add(1))));
+    }
+    return result;
+}
+
+let input = "2199943210\n3987894921\n9856789892\n8767896789\n9899965678";
+
+let table = list();
+
+for (row in split(input, "\n")) {
+    table.add(parseRow(row));
+}
+
+let width = table.get(0).len;
+let height = table.len;
+
+let cellAt = lambda(x, y) {
+    let value = 999;
+    if (and(
+        x.ge(0),
+        x.lt(width),
+        y.ge(0),
+        y.lt(height)
+    )) {
+        value = table.get(y).get(x);
+    }
+    return value;
+};
+
+let basinChecked = array(height);
+for (y in range(0, height)) {
+    let row = array(width);
+    for (x in range(0, width)) {
+        row.set(x, false);
+    }
+    basinChecked.set(y, row);
+}
+
+let basinSize = lambda(x, y) {
+    let size = 0;
+    if (cellAt(x, y).lt(9)) {
+        if (not(basinChecked.get(y).get(x))) {
+            basinChecked.get(y).set(x, true);
+            size = size.add(1);
+            size = size.add(basinSize(x.sub(1), y));
+            size = size.add(basinSize(x.add(1), y));
+            size = size.add(basinSize(x, y.sub(1)));
+            size = size.add(basinSize(x, y.add(1)));
+        }
+    }
+    return size;
+};
+
+let sort = lambda(list) {
+    for (i from 0 to list.len) {
+        for (j from i.add(1) to list.len) {
+            let a = list.get(i);
+            let b = list.get(j);
+            if (a.gt(b)) {
+                list.set(i, b);
+                list.set(j, a);
+            }
+        }
+    }
+};
+
+let part1 = 0;
+let basinSizes = list();
+for (x in range(0, width)) {
+    for (y in range(0, height)) {
+        let value = table.get(y).get(x);
+        if (and(
+            cellAt(x.sub(1), y).gt(value),
+            cellAt(x.add(1), y).gt(value),
+            cellAt(x, y.sub(1)).gt(value),
+            cellAt(x, y.add(1)).gt(value)
+        )) {
+            // risk point
+            part1 = part1.add(value).add(1);
+            basinSizes.add(basinSize(x, y));
+        }
+    }
+}
+
+println("part 1: ", part1);
+sort(basinSizes);
+let large1 = basinSizes.get(basinSizes.len.sub(1));
+let large2 = basinSizes.get(basinSizes.len.sub(2));
+let large3 = basinSizes.get(basinSizes.len.sub(3));
+println("part 2: ", large1.mul(large2).mul(large3));
