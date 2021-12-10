@@ -68,8 +68,8 @@ There are only a 3 requirements for defining a method:
 1. Call syntax must begin with either a `.`, `(`, or a `[`.
 2. Parentheses and curly braces must be balanced (in fact they must be balanced
 in the whole source file).
-3. Method dispatch must be parsable without lookahead (we'll see more about that
-in a bit).
+3. A single object's method dispatch must be decidable without lookahead (we'll
+see more about that in a bit).
 
 However, just matching plain tokens if no interest - we also want to be able to
 pass arguments to methods. To achieve that we can use "munchers" in method
@@ -133,6 +133,14 @@ identifier.
 block object representing that code. The block also captures the environment
 where it was written (so lexical scoping is maintained). The block object can be
 executed by calling `.exec` on it.
+
+Munchers are the reason for the "methods must be parsable without lookahead"
+rule. If one method is defined to be `.(a)!` and another is `.$e:expr?`,
+then only once we see a `!` or a `?` we can know whether `a` was supposed to be
+a plain token, or an expression (which would have required `a` to be a defined
+variable). So instead you get an error that methods are ambiguous when you try
+to create an object. However, in some cases ambiguity is allowed and interpreter
+will try to pick the more specific option if possible.
 
 Let's play around with it! The language does not even have a built-in `if`
 statement, but we can define one ourselves:
