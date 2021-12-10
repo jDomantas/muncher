@@ -1,4 +1,4 @@
-use std::ops::Range;
+use std::{ops::Range, path::Path};
 
 use codespan_reporting::{
     diagnostic::{Diagnostic, Label, LabelStyle},
@@ -10,12 +10,12 @@ use crate::{Error, Span};
 
 pub(crate) fn emit(
     error: &Error,
-    source_name: &str,
+    source_name: &Path,
     source: &str,
     output: &mut dyn WriteColor,
 ) {
     let mut files = SimpleFiles::new();
-    let file = files.add(source_name, source);
+    let file = files.add(source_name.display().to_string(), source);
 
     let mut labels = Vec::new();
     labels.push(Label {

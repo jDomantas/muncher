@@ -21,7 +21,7 @@ fn do_run(source: &str) -> (String, String) {
     });
     let stderr = match muncher::eval(source, intr.clone()) {
         Ok(()) => "".to_owned(),
-        Err(e) => e.pretty("test.mnc", source),
+        Err(e) => e.pretty(Path::new("test.mnc"), source),
     };
     let stdout: String = intr.stdout.borrow().clone();
     (stdout, stderr)
