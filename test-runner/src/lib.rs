@@ -31,6 +31,7 @@ fn check_program_run(
     path: &Path,
     stdout_path: Option<&Path>,
     stderr_path: Option<&Path>,
+    allow_recreation: bool,
 ) {
     println!("running {}", path.display());
     let source = std::fs::read_to_string(path)
@@ -49,7 +50,7 @@ fn check_program_run(
     };
     let (actual_out, actual_err) = do_run(&source);
 
-    if cfg!(feature = "recreate") {
+    if cfg!(feature = "recreate") && allow_recreation {
         if actual_err != stderr {
             println!("stderr of {} changed", path.display());
             let stderr_path = add_extension(path, "stderr");
@@ -86,6 +87,90 @@ fn check_program_run(
     }
 }
 
+fn convert_literate(path: &Path) -> String {
+    let source = std::fs::read_to_string(path)
+        .expect(&format!("failed to read {:?}", path));
+
+    let arena = comrak::Arena::new();
+    let root = comrak::parse_document(&arena, &source, &comrak::ComrakOptions::default());
+
+    let mut program = Vec::new();
+
+    fn iter_nodes<'a, F>(node: &'a comrak::nodes::AstNode<'a>, f: &mut F)
+    where
+        F: FnMut(&'a comrak::nodes::AstNode<'a>),
+    {
+        f(node);
+        for c in node.children() {
+            iter_nodes(c, f);
+        }
+    }
+
+    iter_nodes(root, &mut |node| {
+        match &node.data.borrow().value {
+            comrak::nodes::NodeValue::CodeBlock(
+                comrak::nodes::NodeCodeBlock { literal, .. },
+            ) => {
+                program.extend_from_slice(literal);
+            }
+            _ => (),
+        }
+    });
+
+    String::from_utf8(program).unwrap()
+}
+
+fn get_outputs(source: &str) -> String {
+    let mut output = String::new();
+    for line in source.lines() {
+        let line = line.trim();
+        if line.starts_with("// prints:") {
+            output.push_str(line[10..].trim());
+            output.push('\n');
+        }
+    }
+    output
+}
+
+fn read_optional(path: &Path) -> String {
+    match std::fs::read_to_string(path) {
+        Ok(s) => s,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => String::new(),
+        Err(_) => panic!("failed to read {:?}", path),
+    }
+}
+
+fn literate(dir: &Path) {
+    let source = convert_literate(&dir.join("readme.md"));
+    let outputs = get_outputs(&source);
+    let program_file = dir.join("program.mnc");
+    let output_file = add_extension(&program_file, "stdout");
+    let actual_source = read_optional(&program_file);
+    let actual_output = read_optional(&output_file);
+    if source != actual_source {
+        if cfg!(feature = "recreate") {
+            std::fs::write(&program_file, source.as_bytes())
+                .expect(&format!("failed to write {:?}", program_file))
+        } else {
+            panic!("program is not up to date in {}", dir.display());
+        }
+    }
+    if outputs != actual_output {
+        if cfg!(feature = "recreate") {
+            std::fs::write(&output_file, outputs.as_bytes())
+                .expect(&format!("failed to write {:?}", output_file))
+        } else {
+            panic!("output is not up to date in {}", dir.display());
+        }
+    }
+    check_program_run(
+        &program_file,
+        Some(&output_file),
+        None,
+        false,
+    )
+}
+
 fn file_exists(path: &Path) -> bool {
     match std::fs::metadata(path) {
         Ok(_) => true,
@@ -118,7 +203,7 @@ fn test_cases() {
         let stderr_path = add_extension(&path, "stderr");
         let stdout_path = file_exists(&stdout_path).then(|| stdout_path);
         let stderr_path = file_exists(&stderr_path).then(|| stderr_path);
-        check_program_run(&path, stdout_path.as_deref(), stderr_path.as_deref());
+        check_program_run(&path, stdout_path.as_deref(), stderr_path.as_deref(), true);
         used_files.insert(path);
         used_files.extend(stdout_path);
         used_files.extend(stderr_path);
@@ -128,4 +213,9 @@ fn test_cases() {
             panic!("file {} was not used", file.display());
         }
     }
+}
+
+#[test]
+fn intro() {
+    literate(Path::new("../programs/examples/intro"));
 }
