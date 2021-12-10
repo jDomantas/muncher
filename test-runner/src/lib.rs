@@ -232,3 +232,8 @@ fn array() {
 fn aoc() {
     literate(Path::new("../programs/examples/aoc2021-day7"));
 }
+
+#[test]
+fn unparsable() {
+    literate(Path::new("../programs/examples/unparsable"));
+}
