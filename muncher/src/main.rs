@@ -18,6 +18,7 @@ struct Opt {
 
     /// Interpreter stack limit in megabytes, useful if
     /// you get stack overflow when running a program
+    #[structopt(long = "stack")]
     stack: Option<usize>,
 }
 
