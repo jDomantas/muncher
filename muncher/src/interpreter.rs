@@ -551,7 +551,7 @@ struct Matcher {
 }
 
 fn can_start_call(token: &Token) -> bool {
-    token.is_dot() || token.is_left_paren()
+    token.is_dot() || token.is_left_paren() || &*token.source == "["
 }
 
 pub(crate) fn can_start_expr(token: &Token) -> bool {

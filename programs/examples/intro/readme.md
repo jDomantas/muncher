@@ -65,7 +65,7 @@ fancy(++/!@#?/1)%?!3%;
 
 There are only a 3 requirements for defining a method:
 
-1. Call syntax must begin with either a `.` or a `(`.
+1. Call syntax must begin with either a `.`, `(`, or a `[`.
 2. Parentheses and curly braces must be balanced (in fact they must be balanced
 in the whole source file).
 3. Method dispatch must be parsable without lookahead (we'll see more about that
