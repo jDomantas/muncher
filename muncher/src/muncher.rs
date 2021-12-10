@@ -250,7 +250,7 @@ impl Muncher for BlockMuncher {
 }
 
 pub(crate) struct StringMuncher {
-    pub(crate) value: Rc<str>,
+    pub(crate) value: Rc<[char]>,
 }
 
 impl Muncher for StringMuncher {
@@ -294,7 +294,7 @@ impl Muncher for StringMuncher {
             })
         } else if tokens.check(|t| &*t.source == "len").is_some() {
             Ok(MunchOutput::Done {
-                block: Rc::new(Block::Intrinsic(Intrinsic::Value(Value::Int(self.value.chars().count() as i64))))
+                block: Rc::new(Block::Intrinsic(Intrinsic::Value(Value::Int(self.value.len() as i64))))
             })
         } else if tokens.check(|t| &*t.source == "substr").is_some() {
             tokens.expect(Token::is_left_paren, "`(`")?;
@@ -306,8 +306,8 @@ impl Muncher for StringMuncher {
             tokens.expect(Token::is_right_paren, "`)`")?;
             let start = start.clamp(0, self.value.len() as i64) as usize;
             let end = end.clamp(0, self.value.len() as i64) as usize;
-            let take = if end < start { 0 } else { end - start };
-            let result = self.value.chars().skip(start).take(take).collect::<String>().into();
+            let end = std::cmp::max(start, end);
+            let result = self.value[start..end].into();
             Ok(MunchOutput::Done {
                 block: Rc::new(Block::Intrinsic(Intrinsic::Value(Value::String(result))))
             })
@@ -315,7 +315,7 @@ impl Muncher for StringMuncher {
             tokens.expect(Token::is_left_paren, "`(`")?;
             let arg = caller.expr(tokens)?;
             let result = if let Value::String(s) = &arg.value {
-                format!("{}{}", self.value, s).into()
+                self.value.iter().chain(s.iter()).copied().collect::<Rc<[char]>>()
             } else {
                 return Err(MunchOutput::Failed {
                     error: Error {

@@ -171,10 +171,10 @@ pub(crate) fn lex_program(source: &str) -> Result<Vec<Token>> {
     Ok(tokens)
 }
 
-pub(crate) fn unescape_string(str: &str) -> String {
+pub(crate) fn unescape_string(str: &str) -> Vec<char> {
     // strip quotes
     let str = &str[1..(str.len() - 1)];
-    let mut res = String::new();
+    let mut res = Vec::new();
     let mut chars = str.chars();
     while let Some(c) = chars.next() {
         if c == '\\' {

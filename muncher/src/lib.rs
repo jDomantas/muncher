@@ -23,7 +23,7 @@ pub(crate) enum Value {
     Nil,
     Int(i64),
     Bool(bool),
-    String(Rc<str>),
+    String(Rc<[char]>),
     Ident(Rc<str>),
     Block(Rc<Block>),
     Object(Rc<Object>),
@@ -89,7 +89,7 @@ impl fmt::Display for Value {
             Value::Nil => write!(f, "nil"),
             Value::Int(i) => write!(f, "{}", i),
             Value::Bool(b) => write!(f, "{}", b),
-            Value::String(s) => write!(f, "{}", s),
+            Value::String(s) => write!(f, "{}", s.iter().copied().collect::<String>()),
             Value::Ident(i) => write!(f, "<Ident {}>", i),
             Value::Block(_) => write!(f, "<Block>"),
             Value::Object(o) => match &o.name {
