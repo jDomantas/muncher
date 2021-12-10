@@ -45,10 +45,13 @@ muncher program.mnc --stack 64
 
 ## Installation
 
+You can download pre-built binaries from [Github releases](https://github.com/jDomantas/muncher/releases).
+Note that linux binaries did not receive much testing.
+
 ### From source
 
 If you have rust tooling installed (rustc, cargo) you can install the
-interpreter straight from this repo:
+latest version of the interpreter straight from this repo:
 
 ```shell
 cargo install muncher --git https://github.com/jDomantas/muncher.git
