@@ -227,3 +227,8 @@ fn intro() {
 fn array() {
     literate(Path::new("../programs/examples/array"));
 }
+
+#[test]
+fn aoc() {
+    literate(Path::new("../programs/examples/aoc2021-day7"));
+}

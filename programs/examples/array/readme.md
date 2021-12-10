@@ -84,9 +84,6 @@ let println = object {
     () { print("\n"); }
     ($a:expr) { print(a); println(); }
     ($a:expr, $b:expr) { print(a); println(b); }
-    ($a:expr, $b:expr, $c:expr) { print(a); println(b, c); }
-    ($a:expr, $b:expr, $c:expr, $d:expr) { print(a); println(b, c, d); }
-    ($a:expr, $b:expr, $c:expr, $d:expr, $e:expr) { print(a); println(b, c, d, e); }
 }
 ```
 
