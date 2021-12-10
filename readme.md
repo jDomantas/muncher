@@ -11,6 +11,10 @@ allowing users to recreate many basic language features (ifs, loops, lambda
 functions, etc.) in their own code without having to use some generic
 compiler-friendly syntax.
 
+The idea is that objects method should be thought as defined in terms of pattern
+macthing on syntax instead of an object providing a few syntactic features to
+access object's properties.
+
 Take a look at the [intro example](./programs/examples/intro) for an overview of
 the language.
 
